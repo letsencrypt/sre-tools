@@ -42,13 +42,11 @@ func PrintMemUsage() {
 	}
 
 	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
-	fmt.Printf("Alloc = %v GB", bToGB(m.Alloc))
-	fmt.Printf("\tTotalAlloc = %v GB", bToGB(m.TotalAlloc))
-	fmt.Printf("\tSys = %v GB", bToGB(m.Sys))
-	fmt.Printf("\tNumGC = %v\n", m.NumGC)
+	log.Printf("Alloc = %d GB\tTotalAlloc = %d GB\tSys = %d GB\t NumGC = %d",
+		bToGB(m.Alloc), bToGB(m.TotalAlloc), bToGB(m.Sys), m.NumGC)
 }
 
-func process(ch chan data, targetDate time.Time) {
+func process(ch chan data, targetDate time.Time, done chan bool) {
 	earliestIssuance := targetDate.Add(-24 * 90 * time.Hour)
 	serialCount := make(map[string]struct{})
 	reversedNameCount := make(map[string]struct{})
@@ -75,37 +73,57 @@ func process(ch chan data, targetDate time.Time) {
 	}
 
 	targetDateFormatted := targetDate.Format(dateFormat)
-	fmt.Printf("serials %s\t%d\n", targetDateFormatted, len(serialCount))
-	fmt.Printf("names %s\t%d\n", targetDateFormatted, len(reversedNameCount))
-	fmt.Printf("registered %s\t%d\n", targetDateFormatted, len(registeredDomainCount))
+	// certsIssued, certsActive, fqdnsActive, regDomainsActive
+	fmt.Printf("%s\tNULL\t%d\t%d\t%d\n", targetDateFormatted,
+		len(serialCount), len(reversedNameCount), len(registeredDomainCount))
 	PrintMemUsage()
-	os.Exit(0)
+	done <- true
 }
 
 func main() {
-	targetDateFlag := flag.String("targetDate", "", "Target date")
+	startDateFlag := flag.String("startDate", "", "Start date")
+	endDateFlag := flag.String("endDate", "", "End date")
 	flag.Parse()
-	if targetDateFlag == nil {
+	if startDateFlag == nil || endDateFlag == nil {
 		log.Fatal("requires target date")
 	}
 
-	targetDate, err := time.Parse(dateFormat, *targetDateFlag)
+	startDate, err := time.Parse(dateFormat, *startDateFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	endDate, err := time.Parse(dateFormat, *endDateFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for d := startDate; d.Before(endDate); d = d.Add(24 * time.Hour) {
+		doDate(d)
+	}
+}
+
+func doDate(targetDate time.Time) {
+	var files []string
+
+	for d := targetDate.Add(-90 * 24 * time.Hour); d.Before(targetDate.Add(24 * time.Hour)); d = d.Add(24 * time.Hour) {
+		files = append(files, d.Format(dateFormat+".tsv"))
+	}
+	done := make(chan bool)
 	ch := make(chan data, 100000)
 
-	go process(ch, targetDate)
+	go process(ch, targetDate, done)
 
-	read(ch, flag.Args()[1:])
+	go read(ch, files)
+	<-done
 }
 
 func read(ch chan data, filenames []string) {
-	for _, filename := range flag.Args()[1:] {
+	for _, filename := range filenames {
 		f, err := os.Open(filename)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			continue
 		}
 		reader := csv.NewReader(f)
 		reader.Comma = '\t'
