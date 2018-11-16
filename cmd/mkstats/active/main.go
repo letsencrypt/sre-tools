@@ -81,7 +81,7 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 		hasher2 := fnv.New64a()
 		hasher2.Write([]byte(eTLDPlusOne))
 		eTLDPlusOneUint64 := hasher2.Sum64()
-		names[eTLDPlusOneUint64] = struct{}{}
+		registeredNames[eTLDPlusOneUint64] = struct{}{}
 	}
 
 	PrintMemUsage()
