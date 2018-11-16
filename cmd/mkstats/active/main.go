@@ -48,13 +48,14 @@ func PrintMemUsage() {
 		bToGB(m.Alloc), bToGB(m.TotalAlloc), bToGB(m.Sys), m.NumGC)
 }
 
-const expectedSize = 50000000
+const expectedSize = 5e7
 
 func process(ch chan data, targetDate time.Time, done chan bool) {
 	earliestIssuance := targetDate.Add(-24 * 90 * time.Hour)
 	serialCount := make(map[uint64]struct{}, expectedSize)
 	names := make(map[uint64]struct{}, expectedSize)
 	registeredNames := make(map[uint64]struct{}, expectedSize)
+	today := make(map[uint64]struct{}, 1e6)
 	for d := range ch {
 		date, err := time.Parse(dateFormatFull, d.date)
 		if err != nil {
@@ -66,6 +67,10 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 		// de-duplicate the serial numbers and FQDNs
 		serialUint64 := binary.BigEndian.Uint64(d.serialBytes[6:])
 		serialCount[serialUint64] = struct{}{}
+
+		if date.After(targetDate.Add(-24*time.Hour)) && date.Before(targetDate) {
+			today[serialUint64] = struct{}{}
+		}
 
 		hasher1 := fnv.New64a()
 		hasher1.Write([]byte(d.reversedName))
@@ -88,8 +93,8 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 
 	targetDateFormatted := targetDate.Format(dateFormat)
 	// certsIssued, certsActive, fqdnsActive, regDomainsActive
-	fmt.Printf("%s\tNULL\t%d\t%d\t%d\n", targetDateFormatted,
-		len(serialCount), len(names), len(registeredNames))
+	fmt.Printf("%s\tNULL\t%d\t%d\t%d\t%d\n", targetDateFormatted,
+		len(serialCount), len(names), len(registeredNames), len(today))
 	done <- true
 }
 
