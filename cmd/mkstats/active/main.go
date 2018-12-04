@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/csv"
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"os"
@@ -46,10 +48,14 @@ func PrintMemUsage() {
 		bToGB(m.Alloc), bToGB(m.TotalAlloc), bToGB(m.Sys), m.NumGC)
 }
 
+const expectedSize = 5e7
+
 func process(ch chan data, targetDate time.Time, done chan bool) {
 	earliestIssuance := targetDate.Add(-24 * 90 * time.Hour)
-	serialCount := make(map[string]struct{})
-	names := make(map[string]struct{})
+	serialCount := make(map[uint64]struct{}, expectedSize)
+	names := make(map[uint64]struct{}, expectedSize)
+	registeredNames := make(map[uint64]struct{}, expectedSize)
+	today := make(map[uint64]struct{}, 1e6)
 	for d := range ch {
 		date, err := time.Parse(dateFormatFull, d.date)
 		if err != nil {
@@ -59,32 +65,36 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 			continue
 		}
 		// de-duplicate the serial numbers and FQDNs
-		serialCount[string(d.serialBytes[6:])] = struct{}{}
-		names[ReverseName(d.reversedName)] = struct{}{}
-	}
+		serialUint64 := binary.BigEndian.Uint64(d.serialBytes[6:])
+		serialCount[serialUint64] = struct{}{}
 
-	fqdnCount := len(names)
-	// Now, having recorded the number of FQDNs, make the fqdnCount map smaller
-	// by deleting each FQDN and adding its registered domain. This gets us the
-	// count of unique registered domains.
-	for k, _ := range names {
-		eTLDPlusOne, err := publicsuffix.EffectiveTLDPlusOne(k)
+		if date.After(targetDate.Add(-24*time.Hour)) && date.Before(targetDate) {
+			today[serialUint64] = struct{}{}
+		}
+
+		hasher1 := fnv.New64a()
+		hasher1.Write([]byte(d.reversedName))
+		nameUint64 := hasher1.Sum64()
+		names[nameUint64] = struct{}{}
+		eTLDPlusOne, err := publicsuffix.EffectiveTLDPlusOne(ReverseName(d.reversedName))
 		// EffectiveTLDPlusOne errors when its input is exactly equal to a public
 		// suffix, which sometimes happens. In that case, just count the name
 		// itself.
 		if err != nil {
-			continue
+			eTLDPlusOne = ReverseName(d.reversedName)
 		}
-		delete(names, k)
-		names[eTLDPlusOne] = struct{}{}
+		hasher2 := fnv.New64a()
+		hasher2.Write([]byte(eTLDPlusOne))
+		eTLDPlusOneUint64 := hasher2.Sum64()
+		registeredNames[eTLDPlusOneUint64] = struct{}{}
 	}
+
 	PrintMemUsage()
-	registeredDomainCount := len(names)
 
 	targetDateFormatted := targetDate.Format(dateFormat)
 	// certsIssued, certsActive, fqdnsActive, regDomainsActive
-	fmt.Printf("%s\tNULL\t%d\t%d\t%d\n", targetDateFormatted,
-		len(serialCount), fqdnCount, registeredDomainCount)
+	fmt.Printf("%s\tNULL\t%d\t%d\t%d\t%d\n", targetDateFormatted,
+		len(serialCount), len(names), len(registeredNames), len(today))
 	done <- true
 }
 
