@@ -27,7 +27,7 @@ func main() {
 			log.Fatal(err)
 		}
 		if _, ok := files[date]; !ok {
-			f, err := os.OpenFile(date+".tsv", os.O_WRONLY|os.O_CREATE, 0600)
+			f, err := os.OpenFile(date+".tsv", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 			if err != nil {
 				log.Fatal(err)
 			}
