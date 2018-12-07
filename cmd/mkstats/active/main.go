@@ -93,8 +93,8 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 
 	targetDateFormatted := targetDate.Format(dateFormat)
 	// certsIssued, certsActive, fqdnsActive, regDomainsActive
-	fmt.Printf("%s\tNULL\t%d\t%d\t%d\t%d\n", targetDateFormatted,
-		len(serialCount), len(names), len(registeredNames), len(today))
+	fmt.Printf("%s\t%d\t%d\t%d\t%d\n", len(today), targetDateFormatted,
+		len(serialCount), len(names), len(registeredNames))
 	done <- true
 }
 
