@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -101,9 +102,22 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 func main() {
 	startDateFlag := flag.String("startDate", "", "Start date")
 	endDateFlag := flag.String("endDate", "", "End date")
+	cpuprofile := flag.String("cpuprofile", "", "Write cpu profile to `file`")
+
 	flag.Parse()
 	if startDateFlag == nil || endDateFlag == nil {
 		log.Fatal("requires target date")
+	}
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
 	}
 
 	startDate, err := time.Parse(dateFormat, *startDateFlag)
