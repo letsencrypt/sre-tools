@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/csv"
 	"encoding/hex"
@@ -93,11 +94,24 @@ func process(ch chan data, targetDate time.Time, done chan bool) {
 	PrintMemUsage()
 
 	targetDateFormatted := targetDate.Format(dateFormat)
+	out := os.Stdout
+	if *outFile != "" {
+		var err error
+		out, err = os.OpenFile(*outFile, os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer out.Close()
+	}
 	// certsIssued, certsActive, fqdnsActive, regDomainsActive
-	fmt.Printf("%s\t%d\t%d\t%d\t%d\n", targetDateFormatted, len(today),
+	fmt.Fprintf(out, "%s\t%d\t%d\t%d\t%d\n", targetDateFormatted, len(today),
 		len(serialCount), len(names), len(registeredNames))
 	done <- true
 }
+
+// Only necessary if rebuilding old data.
+var allowAbsentFiles = flag.Bool("allowAbsentFiles", false, "If the input file for a given date is absent, continue rather than aborting")
+var outFile = flag.String("outFile", "", "Append lines to this file. Empty means emit to stdout.")
 
 func main() {
 	startDateFlag := flag.String("startDate", "", "Start date")
@@ -136,17 +150,37 @@ func main() {
 }
 
 func doDate(targetDate time.Time) {
-	var files []string
+	// Check if this date already exists in the output file; if so, skip.
+	if *outFile != "" {
+		formattedDate := targetDate.Format(dateFormat)
+		f, err := os.Open(*outFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if strings.HasPrefix(scanner.Text(), formattedDate) {
+				log.Printf("Skipping %s, already present in %s.", formattedDate, *outFile)
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Fatalf("reading %s: %s", *outFile, err)
+		}
+	}
 
+	done := make(chan bool)
+	dataChan := make(chan data, 100000)
+
+	go process(dataChan, targetDate, done)
+
+	// Build a list of files corresponding to dates in the last 90 days and read
+	// their contents into dataChan.
+	var files []string
 	for d := targetDate.Add(-90 * 24 * time.Hour); d.Before(targetDate.Add(24 * time.Hour)); d = d.Add(24 * time.Hour) {
 		files = append(files, d.Format(dateFormat+".tsv"))
 	}
-	done := make(chan bool)
-	ch := make(chan data, 100000)
-
-	go process(ch, targetDate, done)
-
-	go read(ch, files)
+	go read(dataChan, files)
 	<-done
 }
 
@@ -154,8 +188,12 @@ func read(ch chan data, filenames []string) {
 	for _, filename := range filenames {
 		f, err := os.Open(filename)
 		if err != nil {
-			log.Print(err)
-			continue
+			if *allowAbsentFiles {
+				log.Print(err)
+				continue
+			} else {
+				log.Fatal(err)
+			}
 		}
 		reader := csv.NewReader(f)
 		reader.Comma = '\t'
