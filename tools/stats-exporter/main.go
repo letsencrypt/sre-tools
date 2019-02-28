@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/letsencrypt/sre-tools/cmd"
 )
 
@@ -45,7 +46,11 @@ var execRun = func(c *exec.Cmd) error {
 	return c.Run()
 }
 
-// Connect to the database and run the select query
+// Connect to the database and run the select query to gather all of the
+// issuedNames between two timestamps. In main() we construct the timeframe as
+// 24 hour window covering the previous day. It is expected that this program
+// will run after 00:00 on any given day in order to get a complete data set of
+// the previous day's issued names.
 func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) {
 	dbDSN, err := ioutil.ReadFile(dbConnect)
 	if err != nil {
@@ -55,7 +60,10 @@ func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) 
 	if err != nil {
 		return nil, fmt.Errorf("Could not establish database connection: %s", err)
 	}
-	rows, err := db.Query(`SELECT id,reversedName,notBefore,serial FROM issuedNames where notBefore >= ? and notBefore < ?`, beginTimeStamp, endTimeStamp)
+	rows, err := db.Query(
+		`SELECT id, reversedName, notBefore, serial
+		 FROM issuedNames 
+		 where notBefore >= ? and notBefore < ?`, beginTimeStamp, endTimeStamp)
 	if err != nil {
 		return nil, fmt.Errorf("Could not complete database query: %s", err)
 	}
@@ -87,7 +95,10 @@ func compress(outputFileName string) error {
 	return nil
 }
 
-// SCP the compressed file to a remote host
+// SCP the compressed file to a remote host using a specified key file.
+// Requiring a key allows low privledge users wihtout a home directory or
+// persistent SSH configs to to run the program and transfer the files to
+// hosts that have SSH confifugred for a set of authorized keys
 func scp(outputFileName, destination, key string) error {
 	outputGZIPName := outputFileName + ".gz"
 	scpCmd := exec.Command("scp", "-i", key, outputGZIPName, destination)
@@ -99,17 +110,17 @@ func scp(outputFileName, destination, key string) error {
 
 func main() {
 	dbConnect := flag.String("dbConnect", "", "Path to the DB URL file")
-	destination := flag.String("destination", "localhost:/tmp", "Location to SCP the TSV result file to")
+	destination := flag.String("destination", "localhost:/tmp", "Location to SCP the gzipped TSV result file to")
 	key := flag.String("key", "id_rsa", "Identity key for SCP")
 	flag.Parse()
 
 	// The query we run against the database is to examine the previous day of data
-	// we construct dates that correspond ot the start and stop of theat 24 hour window
+	// we construct dates that correspond to the start and stop of that 24 hour window
 	now := time.Now()
 	yesterday := now.Add(-24 * time.Hour)
 	yesterdayDateStamp := yesterday.Format("2006-01-02")
 	endDateStamp := now.Format("2006-01-02")
-	outputFileName := fmt.Sprintf("results-%s.tsv", yesterday.Format("2006-01-02"))
+	outputFileName := fmt.Sprintf("results-%s.tsv", yesterdayDateStamp)
 
 	outFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	cmd.FailOnError(err, fmt.Sprintf("Could not create results file %q", outputFileName))

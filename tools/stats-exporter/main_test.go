@@ -19,10 +19,7 @@ type myRows struct {
 }
 
 func (m *myRows) Next() bool {
-	if len(m.rows) > 0 {
-		return true
-	}
-	return false
+	return len(m.rows) > 0
 }
 
 func (m *myRows) Scan(dest ...interface{}) error {
@@ -211,9 +208,6 @@ func TestQueryDBError(t *testing.T) {
 	if !strings.Contains(err.Error(), "this is actually an error") {
 		t.Errorf("wrong error. got: %q", err)
 	}
-}
-
-type errorReadFile struct {
 }
 
 func TestQueryDBConnectError(t *testing.T) {
