@@ -39,19 +39,19 @@ func (m *myRows) Scan(dest ...interface{}) error {
 func TestWriteTSVData(t *testing.T) {
 	var testData = &myRows{
 		rows: []oneRow{
-			oneRow{
+			{
 				id:        "1",
 				rname:     "com.example",
 				notBefore: "2019-01-01 01:00:00",
 				serial:    "abc",
 			},
-			oneRow{
+			{
 				id:        "2",
 				rname:     "com.example",
 				notBefore: "2019-01-01 01:00:00",
 				serial:    "def",
 			},
-			oneRow{
+			{
 				id:        "3",
 				rname:     "com.example",
 				notBefore: "2019-01-01 01:00:00",
@@ -106,7 +106,7 @@ func (e *errorWriter) Write(p []byte) (int, error) {
 func TestWriterError(t *testing.T) {
 	var testData = &myRows{
 		rows: []oneRow{
-			oneRow{
+			{
 				id:        "1",
 				rname:     "com.example",
 				notBefore: "2019-01-01 01:00:00",

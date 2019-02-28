@@ -96,7 +96,7 @@ func compress(outputFileName string) error {
 }
 
 // SCP the compressed file to a remote host using a specified key file.
-// Requiring a key allows low privledge users wihtout a home directory or
+// Requiring a key allows low privilege users wihtout a home directory or
 // persistent SSH configs to to run the program and transfer the files to
 // hosts that have SSH confifugred for a set of authorized keys
 func scp(outputFileName, destination, key string) error {
