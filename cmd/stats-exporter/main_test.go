@@ -177,8 +177,43 @@ func TestQueryDB(t *testing.T) {
 	}()
 
 	_, err = queryDB(tmpfile.Name(), "2019-01-01", "2019-01-02")
+	if err != nil && !strings.Contains(err.Error(), "No results match query") {
+		t.Fatal(err)
+	}
+
+}
+
+func TestQueryDBNoRows(t *testing.T) {
+	content := []byte("some@tcp(fake:3306)/DSN data")
+	tmpfile, err := ioutil.TempFile("", "")
+
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// As above, we cannot construct a fake database object to query against
+	// so we return a simpleDB that can be used with the Query function and
+	// return no results to make sure it errors when there are no rows
+	checkedSQLOpen := func(driver, dsn string) (dbQueryable, error) {
+		return &simpleDB{}, nil
+	}
+	savedSQLOpen := sqlOpen
+	sqlOpen = checkedSQLOpen
+	defer func() {
+		sqlOpen = savedSQLOpen
+	}()
+
+	_, err = queryDB(tmpfile.Name(), "2019-01-01", "2019-01-02")
+	if !strings.Contains(err.Error(), "No results match query") {
+		t.Errorf("wrong error. got: %q", err)
 	}
 
 }

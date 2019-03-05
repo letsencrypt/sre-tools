@@ -73,7 +73,7 @@ func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) 
 	if err != nil {
 		return nil, fmt.Errorf("Could not complete database query: %s", err)
 	}
-	if rows != nil && !rows.Next() {
+	if rows == nil || !rows.Next() {
 		return nil, errors.New("No results match query")
 	}
 	return rows, nil
