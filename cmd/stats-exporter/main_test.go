@@ -22,6 +22,10 @@ func (m *myRows) Next() bool {
 	return len(m.rows) > 0
 }
 
+func (m *myRows) Close() error {
+	return nil
+}
+
 func (m *myRows) Scan(dest ...interface{}) error {
 	if len(dest) != 4 {
 		return fmt.Errorf("wrong number of dest: %d", len(dest))
@@ -86,6 +90,10 @@ func (e *errorRows) Scan(dest ...interface{}) error {
 	return fmt.Errorf("I always error")
 }
 
+func (e *errorRows) Close() error {
+	return nil
+}
+
 func TestWriteTSVDataError(t *testing.T) {
 	var buf bytes.Buffer
 	err := writeTSVData(&errorRows{}, &buf)
@@ -128,6 +136,10 @@ type simpleDB struct {
 
 func (s *simpleDB) Query(string, ...interface{}) (*sql.Rows, error) {
 	return nil, nil
+}
+
+func (s *simpleDB) Close() error {
+	return nil
 }
 
 func TestQueryDB(t *testing.T) {
@@ -174,8 +186,12 @@ func TestQueryDB(t *testing.T) {
 type errorDB struct {
 }
 
-func (s *errorDB) Query(string, ...interface{}) (*sql.Rows, error) {
+func (e *errorDB) Query(string, ...interface{}) (*sql.Rows, error) {
 	return nil, fmt.Errorf("this is actually an error")
+}
+
+func (e *errorDB) Close() error {
+	return nil
 }
 
 func TestQueryDBError(t *testing.T) {

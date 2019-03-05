@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 type sqlRows interface {
 	Next() bool
 	Scan(dest ...interface{}) error
+	Close() error
 }
 
 // dbQueryable is an interface for the sql.Query function that is needed to
@@ -29,6 +31,7 @@ type sqlRows interface {
 // create a sql.Rows sturct to test on
 type dbQueryable interface {
 	Query(string, ...interface{}) (*sql.Rows, error)
+	Close() error
 }
 
 // Used to enable unit tests on the sql.Open function and return the interface
@@ -57,6 +60,9 @@ func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) 
 		return nil, fmt.Errorf("Could not open database connection file %q: %s", dbConnect, err)
 	}
 	db, err := sqlOpen("mysql", strings.TrimSpace(string(dbDSN)))
+	defer func() {
+		_ = db.Close()
+	}()
 	if err != nil {
 		return nil, fmt.Errorf("Could not establish database connection: %s", err)
 	}
@@ -67,12 +73,18 @@ func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) 
 	if err != nil {
 		return nil, fmt.Errorf("Could not complete database query: %s", err)
 	}
+	if rows != nil && !rows.Next() {
+		return nil, errors.New("No results match query")
+	}
 	return rows, nil
 }
 
 // Write the query results in TSV format
 func writeTSVData(rows sqlRows, outFile io.Writer) error {
-	for rows.Next() {
+	defer func() {
+		rows.Close()
+	}()
+	for {
 		var (
 			id, rname, notBefore, serial string
 		)
@@ -81,6 +93,9 @@ func writeTSVData(rows sqlRows, outFile io.Writer) error {
 		}
 		if _, err := fmt.Fprintf(outFile, "%s\t%s\t%s\t%s\n", id, rname, notBefore, serial); err != nil {
 			return err
+		}
+		if !rows.Next() {
+			break
 		}
 	}
 	return nil
@@ -96,7 +111,7 @@ func compress(outputFileName string) error {
 }
 
 // SCP the compressed file to a remote host using a specified key file.
-// Requiring a key allows low privilege users wihtout a home directory or
+// Requiring a key allows low privilege users without a home directory or
 // persistent SSH configs to to run the program and transfer the files to
 // hosts that have SSH confifugred for a set of authorized keys
 func scp(outputFileName, destination, key string) error {
