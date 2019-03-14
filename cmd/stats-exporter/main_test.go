@@ -321,7 +321,6 @@ func TestScp(t *testing.T) {
 }
 
 func TestCombinedOutput(t *testing.T) {
-
 	noisyFailure := func(c *exec.Cmd) ([]byte, error) {
 		return []byte("Exited and have error information"), fmt.Errorf("some error")
 	}
