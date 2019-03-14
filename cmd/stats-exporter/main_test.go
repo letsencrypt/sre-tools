@@ -276,13 +276,13 @@ func TestQueryDBConnectError(t *testing.T) {
 func TestCompress(t *testing.T) {
 	outputFileName := "fakeFile.tsv"
 
-	checkedArgs := func(c *exec.Cmd) error {
+	checkedArgs := func(c *exec.Cmd) ([]byte, error) {
 		expected := "gzip fakeFile.tsv"
 		args := strings.Join(c.Args, " ")
 		if args != expected {
-			return fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
+			return nil, fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
 		}
-		return nil
+		return nil, nil
 	}
 	savedExecRun := execRun
 	execRun = checkedArgs
@@ -301,13 +301,13 @@ func TestScp(t *testing.T) {
 	destination := "localhost:/tmp"
 	key := "id_rsa"
 
-	checkedArgs := func(c *exec.Cmd) error {
+	checkedArgs := func(c *exec.Cmd) ([]byte, error) {
 		expected := "scp -i id_rsa fakeFile.tsv.gz localhost:/tmp"
 		args := strings.Join(c.Args, " ")
 		if args != expected {
-			return fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
+			return nil, fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
 		}
-		return nil
+		return nil, nil
 	}
 	savedExecRun := execRun
 	execRun = checkedArgs
@@ -317,5 +317,24 @@ func TestScp(t *testing.T) {
 	err := scp(outputFileName, destination, key)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCombinedOutput(t *testing.T) {
+	noisyFailure := func(c *exec.Cmd) ([]byte, error) {
+		return []byte("Exited and have error information"), fmt.Errorf("some error")
+	}
+	savedExecRun := execRun
+	execRun = noisyFailure
+	defer func() {
+		execRun = savedExecRun
+	}()
+	err := scp("key", "file", "destination")
+	if err == nil {
+		t.Fatal("This was supposed to fail")
+	}
+	expected := "Could not scp result file \"key\" to \"file\": some error. output: Exited and have error information"
+	if err.Error() != expected {
+		t.Fatalf("Wrong error returned. Got %q expected %q", err.Error(), expected)
 	}
 }
