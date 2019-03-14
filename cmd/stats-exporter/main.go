@@ -45,8 +45,8 @@ var sqlOpen = func(driver, dsn string) (dbQueryable, error) {
 // Used to to enable unit tests where we don't want to actually run commands
 // on the host. Instead, we can mock the cmd.Run functions and focus on the
 // error logic
-var execRun = func(c *exec.Cmd) error {
-	return c.Run()
+var execRun = func(c *exec.Cmd) ([]byte, error) {
+	return c.CombinedOutput()
 }
 
 // Connect to the database and run the select query to gather all of the
@@ -104,8 +104,8 @@ func writeTSVData(rows sqlRows, outFile io.Writer) error {
 // Compress the results TSV file
 func compress(outputFileName string) error {
 	gzipCmd := exec.Command("gzip", outputFileName)
-	if err := execRun(gzipCmd); err != nil {
-		return fmt.Errorf("Could not gzip result file: %s", err)
+	if output, err := execRun(gzipCmd); err != nil {
+		return fmt.Errorf("Could not gzip result file: %s. output: %s", err, string(output))
 	}
 	return nil
 }
@@ -117,8 +117,8 @@ func compress(outputFileName string) error {
 func scp(outputFileName, destination, key string) error {
 	outputGZIPName := outputFileName + ".gz"
 	scpCmd := exec.Command("scp", "-i", key, outputGZIPName, destination)
-	if err := execRun(scpCmd); err != nil {
-		return fmt.Errorf("Could not scp result file %q to %q: %s", outputFileName, destination, err)
+	if output, err := execRun(scpCmd); err != nil {
+		return fmt.Errorf("Could not scp result file %q to %q: %s. output: %s", outputFileName, destination, err, output)
 	}
 	return nil
 }
