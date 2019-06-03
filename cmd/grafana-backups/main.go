@@ -21,13 +21,15 @@ func writeDashboardFile(uid string) error {
 }
 
 func fetch(path string) ([]byte, error) {
-
+	if os.Getenv("GRAFANA_URL") == "" || os.Getenv("GRAFANA_API_KEY") == "" {
+		return nil, fmt.Errorf("Environment variables GRAFANA_URL and GRAFANA_API_KEY must be set")
+	}
 	timeout := time.Duration(15 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 	}
 
-	request, err := http.NewRequest("GET", "https://radiantlock.letsencrypt.org"+path, nil)
+	request, err := http.NewRequest("GET", os.Getenv("GRAFANA_URL")+path, nil)
 	request.Header.Set("Authorization", "Bearer "+os.Getenv("GRAFANA_API_KEY"))
 	if err != nil {
 		return nil, err
