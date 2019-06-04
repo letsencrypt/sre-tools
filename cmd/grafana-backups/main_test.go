@@ -18,16 +18,19 @@ func TestWriteDashboardFile(t *testing.T) {
 	defer ts.Close()
 
 	os.Setenv("GRAFANA_URL", ts.URL)
+	os.Setenv("GRAFANA_API_KEY", "test")
 
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = writeDashboardFile(dir, "jilliansFakeUID")
+	defer os.RemoveAll(dir)
+
+	err = writeDashboardFile(dir, "fakeUID")
 	if err != nil {
 		t.Errorf("writeDashboardFile failed")
 	}
-	content, err := ioutil.ReadFile(dir + "/jilliansFakeUID.json")
+	content, err := ioutil.ReadFile(dir + "/fakeUID.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,19 +47,22 @@ func TestWriteDashboardFileError(t *testing.T) {
 	defer ts.Close()
 
 	os.Setenv("GRAFANA_URL", ts.URL)
+	os.Setenv("GRAFANA_API_KEY", "test")
 
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = writeDashboardFile(dir, "jilliansFakeUID")
+	defer os.RemoveAll(dir)
+
+	err = writeDashboardFile(dir, "FakeUID")
 	if err == nil {
 		t.Error("Expected error, got none")
 	}
 	if !strings.Contains(err.Error(), "Invalid response code") {
 		t.Errorf("Expected 'Invalid response code', got %q", err)
 	}
-	_, err = os.Stat(dir + "/jilliansFakeUID")
+	_, err = os.Stat(dir + "/FakeUID")
 	if err == nil {
 		t.Error("Expected error, got none")
 	}
@@ -65,9 +71,19 @@ func TestWriteDashboardFileError(t *testing.T) {
 	}
 }
 
-func TestFetchNoEnvironmentSet(t *testing.T) {
+func TestCheckEnvironment(t *testing.T) {
+	os.Setenv("GRAFANA_URL", "fakeserver.com")
+	os.Setenv("GRAFANA_API_KEY", "test")
+	os.Setenv("GRAFANA_BACKUP_DIR", "/tmp/backup")
+
+	err := checkEnv()
+	if err != nil {
+		t.Errorf("Expected no error, go %q", err)
+	}
+}
+func TestNoEnvironmentSet(t *testing.T) {
 	os.Clearenv()
-	_, err := fetch("grafana")
+	err := checkEnv()
 
 	if !strings.Contains(err.Error(), "Environment variables") {
 		t.Errorf("Expected `Environment variables` got %q", err)
