@@ -13,7 +13,10 @@ import (
 func TestWriteDashboardFile(t *testing.T) {
 	expected := "Successful Response"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, expected)
+		_, err := io.WriteString(w, expected)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer ts.Close()
 

@@ -26,7 +26,7 @@ func writeDashboardFile(outputDirectory, uid string) error {
 // to prevent providing the key on the command line. We then query the instance
 // for a given path and return the resulting body.
 func fetch(path string) ([]byte, error) {
-	timeout := time.Duration(15 * time.Second)
+	timeout, _ := time.ParseDuration("15s")
 	client := http.Client{
 		Timeout: timeout,
 	}
@@ -79,7 +79,8 @@ func main() {
 	cmd.FailOnError(err, "Unmarshalling JSON body")
 
 	for _, dashboard := range items {
-		writeDashboardFile("backup", dashboard.UID)
+		err := writeDashboardFile("backup", dashboard.UID)
+		cmd.FailOnError(err, "Writing Dashboard fles")
 	}
 
 }
