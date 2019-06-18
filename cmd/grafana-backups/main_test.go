@@ -13,15 +13,22 @@ import (
 func TestWriteDashboardFile(t *testing.T) {
 	expected := "Successful Response"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := io.WriteString(w, expected)
-		if err != nil {
-			t.Fatal(err)
+		if r.URL.Path == "/api/dashboards/uid/fakeUID" {
+
+			_, err := io.WriteString(w, expected)
+
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			_, err := io.WriteString(w, "Bad response for providing an incorrect path")
+
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}))
 	defer ts.Close()
-
-	os.Setenv("GRAFANA_URL", ts.URL)
-	os.Setenv("GRAFANA_API_KEY", "test")
 
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -29,7 +36,7 @@ func TestWriteDashboardFile(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	err = writeDashboardFile(dir, "fakeUID")
+	err = writeDashboardFile(dir, "fakeUID", ts.URL, "test")
 	if err != nil {
 		t.Errorf("writeDashboardFile failed")
 	}
@@ -40,7 +47,6 @@ func TestWriteDashboardFile(t *testing.T) {
 	if string(content) != "Successful Response" {
 		t.Errorf("Expected %q. Got %q", expected, string(content))
 	}
-
 }
 
 func TestWriteDashboardFileError(t *testing.T) {
@@ -49,16 +55,13 @@ func TestWriteDashboardFileError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	os.Setenv("GRAFANA_URL", ts.URL)
-	os.Setenv("GRAFANA_API_KEY", "test")
-
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 
-	err = writeDashboardFile(dir, "FakeUID")
+	err = writeDashboardFile(dir, "FakeUID", ts.URL, "test")
 	if err == nil {
 		t.Error("Expected error, got none")
 	}
@@ -69,7 +72,7 @@ func TestWriteDashboardFileError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error, got none")
 	}
-	if !strings.Contains(err.Error(), "no such file or directory") {
+	if !os.IsNotExist(err) {
 		t.Errorf("Expected `no such file or directory`  got %q", err)
 	}
 }
@@ -79,11 +82,11 @@ func TestCheckEnvironment(t *testing.T) {
 	os.Setenv("GRAFANA_API_KEY", "test")
 	os.Setenv("GRAFANA_BACKUP_DIR", "/tmp/backup")
 
-	err := checkEnv()
-	if err != nil {
+	if err := checkEnv(); err != nil {
 		t.Errorf("Expected no error, go %q", err)
 	}
 }
+
 func TestNoEnvironmentSet(t *testing.T) {
 	os.Clearenv()
 	err := checkEnv()
@@ -102,11 +105,7 @@ func TestFetchGoodAuthorization(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	os.Setenv("GRAFANA_URL", ts.URL)
-	os.Setenv("GRAFANA_API_KEY", "fake key")
-
-	_, err := fetch("/grafana")
-	if err != nil {
+	if _, err := fetch("/grafana", ts.URL, "fake key"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -120,10 +119,7 @@ func TestFetchBadAuthorization(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	os.Setenv("GRAFANA_URL", ts.URL)
-	os.Setenv("GRAFANA_API_KEY", "bad key")
-
-	_, err := fetch("/grafana")
+	_, err := fetch("/grafana", ts.URL, "bad key")
 	if err == nil {
 		t.Fatal("expected error, got none")
 	}

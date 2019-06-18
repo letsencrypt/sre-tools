@@ -2,37 +2,46 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/letsencrypt/sre-tools/cmd"
 )
 
+var timeout, err = time.ParseDuration("15s")
+
+const (
+	dashboardsByUid = "/api/dashboards/uid/"
+	allDashboards   = "/api/search?dash-db"
+)
+
 // Query the Grafana instance by a dashboard's UID for the raw JSON and write
 // the result to a specified directory
-func writeDashboardFile(outputDirectory, uid string) error {
-	body, err := fetch("/api/dashboards/uid/" + uid)
+func writeDashboardFile(outputDirectory, uid, url, apiKey string) error {
+	body, err := fetch(dashboardsByUid+uid, url, apiKey)
 	if err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile(outputDirectory+"/"+uid+".json", body, 0644)
+	return ioutil.WriteFile(path.Join(outputDirectory, uid+".json"), body, 0644)
 }
 
 // Use environment variables to set the Grafana instance URL and the API key
 // to prevent providing the key on the command line. We then query the instance
 // for a given path and return the resulting body.
-func fetch(path string) ([]byte, error) {
-	timeout, _ := time.ParseDuration("15s")
+func fetch(path, url, apiKey string) ([]byte, error) {
+	//	timeout, _ := time.ParseDuration("15s")
 	client := http.Client{
 		Timeout: timeout,
 	}
 
-	request, err := http.NewRequest("GET", os.Getenv("GRAFANA_URL")+path, nil)
-	request.Header.Set("Authorization", "Bearer "+os.Getenv("GRAFANA_API_KEY"))
+	request, err := http.NewRequest("GET", url+path, nil)
+	request.Header.Set("Authorization", "Bearer "+apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +68,7 @@ func fetch(path string) ([]byte, error) {
 // remaining variables instead of having a mix of environment variables and flags.
 func checkEnv() error {
 	if os.Getenv("GRAFANA_URL") == "" || os.Getenv("GRAFANA_API_KEY") == "" || os.Getenv("GRAFANA_BACKUP_DIR") == "" {
-		return fmt.Errorf("Environment variables GRAFANA_URL and GRAFANA_API_KEY and GRAFANA_BACKUP_DIR must be set")
+		return errors.New("Environment variables GRAFANA_URL, GRAFANA_API_KEY, and GRAFANA_BACKUP_DIR must be set")
 	}
 	return nil
 }
@@ -67,9 +76,13 @@ func checkEnv() error {
 func main() {
 	err := checkEnv()
 	cmd.FailOnError(err, "environment variables")
+	url := os.Getenv("GRAFANA_URL")
+	apiKey := os.Getenv("GRAFANA_API_KEY")
+	backupDir := os.Getenv("GRAFANA_BACKUP_DIR")
 
-	body, err := fetch("/api/search?dash-db")
+	body, err := fetch(allDashboards, url, apiKey)
 	cmd.FailOnError(err, "fetching dashboards")
+
 	type dbItem struct {
 		UID string
 	}
@@ -78,9 +91,12 @@ func main() {
 	err = json.Unmarshal(body, &items)
 	cmd.FailOnError(err, "Unmarshalling JSON body")
 
-	for _, dashboard := range items {
-		err := writeDashboardFile("backup", dashboard.UID)
-		cmd.FailOnError(err, "Writing Dashboard fles")
+	if len(items) == 0 {
+		os.Exit(1)
 	}
 
+	for _, dashboard := range items {
+		err := writeDashboardFile(backupDir, dashboard.UID, url, apiKey)
+		cmd.FailOnError(err, "Writing Dashboard fles")
+	}
 }
