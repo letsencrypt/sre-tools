@@ -118,11 +118,12 @@ func TestFetchBadAuthorization(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
+	var err error
 
-	_, err := fetch("/grafana", ts.URL, "bad key")
-	if err == nil {
+	if _, err = fetch("/grafana", ts.URL, "bad key"); err == nil {
 		t.Fatal("expected error, got none")
 	}
+
 	if !strings.Contains(err.Error(), "Invalid response code") {
 		t.Errorf("Expected 'invalid response code' got %q", err)
 	}
