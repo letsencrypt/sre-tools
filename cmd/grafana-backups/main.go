@@ -13,17 +13,17 @@ import (
 	"github.com/letsencrypt/sre-tools/cmd"
 )
 
-var timeout, err = time.ParseDuration("15s")
+var timeout, _ = time.ParseDuration("15s")
 
 const (
-	dashboardsByUid = "/api/dashboards/uid/"
+	dashboardsByUID = "/api/dashboards/uid/"
 	allDashboards   = "/api/search?dash-db"
 )
 
 // Query the Grafana instance by a dashboard's UID for the raw JSON and write
 // the result to a specified directory
 func writeDashboardFile(outputDirectory, uid, url, apiKey string) error {
-	body, err := fetch(dashboardsByUid+uid, url, apiKey)
+	body, err := fetch(dashboardsByUID+uid, url, apiKey)
 	if err != nil {
 		return err
 	}
