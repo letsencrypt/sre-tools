@@ -14,15 +14,12 @@ func TestWriteDashboardFile(t *testing.T) {
 	expected := "Successful Response"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/dashboards/uid/fakeUID" {
-
 			_, err := io.WriteString(w, expected)
-
 			if err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			_, err := io.WriteString(w, "Bad response for providing an incorrect path")
-
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -73,7 +70,7 @@ func TestWriteDashboardFileError(t *testing.T) {
 		t.Error("Expected error, got none")
 	}
 	if !os.IsNotExist(err) {
-		t.Errorf("Expected `no such file or directory`  got %q", err)
+		t.Errorf("Expected `no such file or directory` got %q", err)
 	}
 }
 
@@ -105,7 +102,7 @@ func TestFetchGoodAuthorization(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if _, err := fetch("/grafana", ts.URL, "fake key"); err != nil {
+	if _, err := fetch(ts.URL+"/grafana", "fake key"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -120,7 +117,7 @@ func TestFetchBadAuthorization(t *testing.T) {
 	defer ts.Close()
 	var err error
 
-	if _, err = fetch("/grafana", ts.URL, "bad key"); err == nil {
+	if _, err = fetch(ts.URL+"/grafana", "bad key"); err == nil {
 		t.Fatal("expected error, got none")
 	}
 

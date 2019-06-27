@@ -20,10 +20,10 @@ const (
 	allDashboards   = "/api/search?dash-db"
 )
 
-// Query the Grafana instance by a dashboard's UID for the raw JSON and write
-// the result to a specified directory
+// writeDashboardFile queries the Grafana instance by a dashboard's UID for
+// the raw JSON and writes the result to a specified directory
 func writeDashboardFile(outputDirectory, uid, url, apiKey string) error {
-	body, err := fetch(dashboardsByUID+uid, url, apiKey)
+	body, err := fetch(url+dashboardsByUID+uid, apiKey)
 	if err != nil {
 		return err
 	}
@@ -31,16 +31,15 @@ func writeDashboardFile(outputDirectory, uid, url, apiKey string) error {
 	return ioutil.WriteFile(path.Join(outputDirectory, uid+".json"), body, 0644)
 }
 
-// Use environment variables to set the Grafana instance URL and the API key
-// to prevent providing the key on the command line. We then query the instance
-// for a given path and return the resulting body.
-func fetch(path, url, apiKey string) ([]byte, error) {
+// fetch uses a fully qualified URL and api key to query a Grafana instance
+// for information at a given path. It returns the resulting body
+func fetch(url, apiKey string) ([]byte, error) {
 	//	timeout, _ := time.ParseDuration("15s")
 	client := http.Client{
 		Timeout: timeout,
 	}
 
-	request, err := http.NewRequest("GET", url+path, nil)
+	request, err := http.NewRequest("GET", url, nil)
 	request.Header.Set("Authorization", "Bearer "+apiKey)
 	if err != nil {
 		return nil, err
@@ -62,10 +61,12 @@ func fetch(path, url, apiKey string) ([]byte, error) {
 	return body, nil
 }
 
-// We need to use an API Key to access Grafana and the cleanest way to set it
-// is with an environment variable so it won't be visible in the process flags.
-// While we're creating one environment variable, we might as well set the
-// remaining variables instead of having a mix of environment variables and flags.
+// checkEnv checks that the environment variables are set and returns an error
+// if they are not. We need to use an API Key to access Grafana and the cleanest
+// way to set it is with an environment variable so it won't be visible in the
+// process flags. While we're creating one environment variable, we might as
+// well set the remaining variables instead of having a mix of environment
+// variables and flags.
 func checkEnv() error {
 	if os.Getenv("GRAFANA_URL") == "" || os.Getenv("GRAFANA_API_KEY") == "" || os.Getenv("GRAFANA_BACKUP_DIR") == "" {
 		return errors.New("Environment variables GRAFANA_URL, GRAFANA_API_KEY, and GRAFANA_BACKUP_DIR must be set")
@@ -80,7 +81,7 @@ func main() {
 	apiKey := os.Getenv("GRAFANA_API_KEY")
 	backupDir := os.Getenv("GRAFANA_BACKUP_DIR")
 
-	body, err := fetch(allDashboards, url, apiKey)
+	body, err := fetch(url+allDashboards, apiKey)
 	cmd.FailOnError(err, "fetching dashboards")
 
 	type dbItem struct {
