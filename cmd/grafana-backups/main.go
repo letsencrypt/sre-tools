@@ -34,7 +34,6 @@ func writeDashboardFile(outputDirectory, uid, url, apiKey string) error {
 // fetch uses a fully qualified URL and api key to query a Grafana instance
 // for information at a given path. It returns the resulting body
 func fetch(url, apiKey string) ([]byte, error) {
-	//	timeout, _ := time.ParseDuration("15s")
 	client := http.Client{
 		Timeout: timeout,
 	}
