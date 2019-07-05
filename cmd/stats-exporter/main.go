@@ -35,7 +35,7 @@ type dbQueryable interface {
 }
 
 // Used to enable unit tests on the sql.Open function and return the interface
-// needed to execute the Query commands. In unit tests, we can moock this
+// needed to execute the Query commands. In unit tests, we can mock this
 // function and return the dbQueryable type and eliminate the need for having
 // a live database up when tests run or mocking the rows
 var sqlOpen = func(driver, dsn string) (dbQueryable, error) {
@@ -68,7 +68,7 @@ func queryDB(dbConnect, beginTimeStamp, endTimeStamp string) (*sql.Rows, error) 
 	}
 	rows, err := db.Query(
 		`SELECT id, reversedName, notBefore, serial
-		 FROM issuedNames 
+		 FROM issuedNames
 		 where notBefore >= ? and notBefore < ?`, beginTimeStamp, endTimeStamp)
 	if err != nil {
 		return nil, fmt.Errorf("Could not complete database query: %s", err)
