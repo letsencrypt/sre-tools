@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/letsencrypt/sre-tools/cmd"
+	"github.com/letsencrypt/sre-tools/s3Put"
 )
 
 // We only use these two functions on the sql.rows object, so we just define an
@@ -123,11 +125,27 @@ func scp(outputFileName, destination, key string) error {
 	return nil
 }
 
+// Push compressed file to an aws s3 bucket. Requires filename, aws region
+// and s3 bucket name.
+func pushToS3(outputFileName, s3Region, s3Bucket string) error {
+	outputGZIPName := outputFileName + ".gz"
+	err := s3Put.AddFileToS3(s3Region, s3Bucket, outputGZIPName)
+	return err
+}
+
 func main() {
 	dbConnect := flag.String("dbConnect", "", "Path to the DB URL file")
-	destination := flag.String("destination", "localhost:/tmp", "Location to SCP the gzipped TSV result file to")
+	destination := flag.String("destination", "", "Location to SCP the gzipped TSV result file to")
+	s3Region := flag.String("s3Region", "us-east-1", "AWS Region where s3 bucket exists")
+	s3Bucket := flag.String("s3Bucket", "", "AWS S3 bucket name to store output file")
 	key := flag.String("key", "id_rsa", "Identity key for SCP")
 	flag.Parse()
+
+	// Check to see if either s3 bucket or scp destination is defined and error if not
+	if *s3Bucket == "" && *destination == "" {
+		flag.Usage()
+		log.Fatal("Must specify either s3Bucket, scp destination or both")
+	}
 
 	// The query we run against the database is to examine the previous day of data
 	// we construct dates that correspond to the start and stop of that 24 hour window
@@ -153,6 +171,31 @@ func main() {
 
 	err = compress(outputFileName)
 	cmd.FailOnError(err, "Could not compress results")
-	err = scp(outputFileName, *destination, *key)
-	cmd.FailOnError(err, "Could not send results")
+
+	// Track if an error occured so we can try both copy methods
+	// before exiting with error.
+	hadError := false
+
+	// Only scp file if scp destination is specified.
+	if *destination != "" {
+		err = scp(outputFileName, *destination, *key)
+		if err != nil {
+			log.Printf("Failed to scp to %s\n", *destination)
+			hadError = true
+		}
+	}
+
+	// Only copy file to s3 if bucket is specified.
+	if *s3Bucket != "" {
+		err = pushToS3(outputFileName, *s3Region, *s3Bucket)
+		if err != nil {
+			log.Printf("Failed to push to s3 bucket %s\n", *s3Bucket)
+			hadError = true
+		}
+	}
+
+	// If any of the target destinations errored exit with error.
+	if hadError {
+		log.Fatal("There were errors copying files to destination.")
+	}
 }
