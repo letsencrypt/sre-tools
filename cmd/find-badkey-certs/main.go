@@ -33,6 +33,8 @@ var sqlOpen = func(driver, dsn string) (dbQueryable, error) {
 
 var batchSize = flag.Int("batchSize", 1000, "Size of batch to query the database with.")
 
+const failStatus = 1
+
 func main() {
 	dbConnect := flag.String("dbConnect", "", "Path to the DB URL file")
 	blockedKeysFile := flag.String("blockedKeysFile", "", "Path to blocked key file")
@@ -42,7 +44,6 @@ func main() {
 
 	if *dbConnect == "" || *blockedKeysFile == "" {
 		flag.Usage()
-		const failStatus = 1
 		os.Exit(failStatus)
 	}
 
