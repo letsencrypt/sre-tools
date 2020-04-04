@@ -110,6 +110,8 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 		if err != nil {
 			return -1, err
 		}
+		// If the key is forbidden by the key policy (typically because it's
+		// blocked), print the serial and error message to stderr.
 		if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
 			fmt.Fprintln(os.Stderr, serial, err)
 		}
