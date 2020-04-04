@@ -14,15 +14,6 @@ import (
 	"github.com/letsencrypt/boulder/goodkey"
 )
 
-// We only use these two functions on the sql.rows object, so we just define an
-// interface with those methods instead of importing all of them. This facilitates
-// mock implementation for unit tests
-type sqlRows interface {
-	Next() bool
-	Scan(dest ...interface{}) error
-	Close() error
-}
-
 // dbQueryable is an interface for the sql.Query function that is needed to
 // query the database. Using this interface allows tests to swap out the
 // query implementation and return the needed object type since we cannot
@@ -88,10 +79,10 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 		 where id > ?
 		 LIMIT ?`, maxID, *batchSize)
 	if err != nil {
-		return -1, fmt.Errorf("Could not complete database query: %s", err)
+		return -1, fmt.Errorf("could not complete database query: %s", err)
 	}
 	if rows == nil || !rows.Next() {
-		return -1, fmt.Errorf("No results match query for certID > %d (possibly reached latest certificate)", maxID)
+		return -1, fmt.Errorf("no results match query for certID > %d (possibly reached latest certificate)", maxID)
 	}
 	defer func() {
 		rows.Close()
