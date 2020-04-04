@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/letsencrypt/boulder/goodkey"
 )
@@ -20,6 +21,7 @@ import (
 // create a sql.Rows sturct to test on
 type dbQueryable interface {
 	Query(string, ...interface{}) (*sql.Rows, error)
+	QueryRow(string, ...interface{}) *sql.Row
 	Close() error
 }
 
@@ -89,7 +91,7 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 		 where id > ?
 		 LIMIT ?`, maxID, *batchSize)
 	if err != nil {
-		return -1, fmt.Errorf("could not complete database query: %s", err)
+		return -1, fmt.Errorf("querying certificates > %d: %s", maxID, err)
 	}
 	defer rows.Close()
 
@@ -112,7 +114,13 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 		// If the key is forbidden by the key policy (typically because it's
 		// blocked), print the serial and error message to stderr.
 		if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
-			fmt.Fprintln(os.Stderr, serial, err)
+			output := fmt.Sprintf("%s %s", serial, err)
+
+			if isRevoked, err := isRevoked(db, serial); err != nil {
+				return -1, err
+			} else if !isRevoked {
+				fmt.Fprintln(os.Stderr, output)
+			}
 		}
 	}
 
@@ -125,4 +133,19 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	}
 
 	return id, nil
+}
+
+func isRevoked(db dbQueryable, serial string) (bool, error) {
+	var revokedTime mysql.NullTime
+
+	err := db.QueryRow(
+		`SELECT revokedDate
+		 FROM certificateStatus
+		 WHERE serial = ?`,
+		serial).Scan(&revokedTime)
+	if err != nil {
+		return false, err
+	}
+
+	return !revokedTime.Time.IsZero(), nil
 }
