@@ -42,7 +42,8 @@ func main() {
 
 	if *dbConnect == "" || *blockedKeysFile == "" {
 		flag.Usage()
-		os.Exit(1)
+		const failStatus = 1
+		os.Exit(failStatus)
 	}
 
 	keyPolicy, err := goodkey.NewKeyPolicy("", *blockedKeysFile)
