@@ -39,6 +39,7 @@ func main() {
 	startingID := flag.Int("startingID", 0, "ID to start iterating on the certificates table from")
 
 	flag.Parse()
+
 	if *dbConnect == "" || *blockedKeysFile == "" {
 		flag.Usage()
 		os.Exit(1)
@@ -51,24 +52,31 @@ func main() {
 
 	dbDSN, err := ioutil.ReadFile(*dbConnect)
 	if err != nil {
-		log.Fatalf("Could not open database connection file %q: %s", dbConnect, err)
+		log.Fatalf("Could not open database connection file %q: %s", *dbConnect, err)
 	}
+
 	db, err := sqlOpen("mysql", strings.TrimSpace(string(dbDSN)))
-	defer func() {
-		_ = db.Close()
-	}()
 	if err != nil {
 		log.Fatalf("Could not establish database connection: %s", err)
 	}
+	defer db.Close()
 
 	maxID := *startingID
+
 	for {
-		var err error
-		maxID, err = queryOnce(db, keyPolicy, maxID)
+		newMaxID, err := queryOnce(db, keyPolicy, maxID)
 		if err != nil {
+			if err == sql.ErrNoRows {
+				fmt.Printf("finished processing with maxID: %d\n", maxID)
+				os.Exit(0)
+			}
+
 			log.Fatal(err)
 		}
+
 		fmt.Printf("processed batch of certificates, maxID: %d\n", maxID)
+
+		maxID = newMaxID
 	}
 }
 
@@ -81,34 +89,38 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	if err != nil {
 		return -1, fmt.Errorf("could not complete database query: %s", err)
 	}
-	if rows == nil || !rows.Next() {
-		return -1, fmt.Errorf("no results match query for certID > %d (possibly reached latest certificate)", maxID)
-	}
-	defer func() {
-		rows.Close()
-	}()
+	defer rows.Close()
 
 	var (
 		id     int
 		serial string
 		der    []byte
 	)
-	for {
+
+	for rows.Next() {
 		if err := rows.Scan(&id, &serial, &der); err != nil {
 			return -1, err
 		}
+
 		cert, err := x509.ParseCertificate(der)
 		if err != nil {
 			return -1, err
 		}
+
 		// If the key is forbidden by the key policy (typically because it's
 		// blocked), print the serial and error message to stderr.
 		if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
 			fmt.Fprintln(os.Stderr, serial, err)
 		}
-		if !rows.Next() {
-			break
-		}
 	}
+
+	if err := rows.Err(); err != nil {
+		return -1, err
+	}
+
+	if id == 0 {
+		return -1, sql.ErrNoRows
+	}
+
 	return id, nil
 }
