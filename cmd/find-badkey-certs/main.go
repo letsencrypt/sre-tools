@@ -83,6 +83,9 @@ func main() {
 	}
 }
 
+// badKeyError is an error indicating that a certificate was found to have a bad
+// key. We use it to detect that particular case and write to stderr rather than
+// ending the program.
 type badKeyError struct {
 	msg string
 }
@@ -91,6 +94,8 @@ func (bke badKeyError) Error() string {
 	return bke.msg
 }
 
+// queryOnce processes a batch of certificates starting with maxID, of size
+// *batchSize.
 func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, error) {
 	rows, err := db.Query(
 		`SELECT id, serial, der
