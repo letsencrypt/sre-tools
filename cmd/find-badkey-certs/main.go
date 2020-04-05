@@ -83,6 +83,19 @@ func main() {
 	}
 }
 
+// badKeyError is an error indicating that a certificate was found to have a bad
+// key. We use it to detect that particular case and write to stderr rather than
+// ending the program.
+type badKeyError struct {
+	msg string
+}
+
+func (bke badKeyError) Error() string {
+	return bke.msg
+}
+
+// queryOnce processes a batch of certificates starting with maxID, of size
+// *batchSize.
 func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, error) {
 	rows, err := db.Query(
 		`SELECT id, serial, der
@@ -94,32 +107,36 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	}
 	defer rows.Close()
 
+	results := make(chan error)
+
 	var (
 		id     int
 		serial string
 		der    []byte
 	)
 
-	for rows.Next() {
+	// Keep track of how many rows we've read.
+	var i = 0
+
+	for ; rows.Next(); i++ {
 		if err := rows.Scan(&id, &serial, &der); err != nil {
 			return -1, err
 		}
 
-		cert, err := x509.ParseCertificate(der)
-		if err != nil {
+		go func(serial string, der []byte, results chan<- error) {
+			results <- handleCert(serial, der, db, keyPolicy)
+		}(serial, der, results)
+	}
+	// Read off exactly as many entries from the results channel as we put onto
+	// it. Note that we can't just iterate *batchSize many times because the
+	// number of rows returned will be less than batchSize when we reach the end
+	// of the rows.
+	for ; i > 0; i-- {
+		err := <-results
+		if _, ok := err.(badKeyError); ok {
+			fmt.Fprintln(os.Stderr, err)
+		} else if err != nil {
 			return -1, err
-		}
-
-		// If the key is forbidden by the key policy (typically because it's
-		// blocked), print the serial and error message to stderr.
-		if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
-			output := fmt.Sprintf("%s %s", serial, err)
-
-			if isRevoked, err := isRevoked(db, serial); err != nil {
-				return -1, err
-			} else if !isRevoked {
-				fmt.Fprintln(os.Stderr, output)
-			}
 		}
 	}
 
@@ -132,6 +149,30 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	}
 
 	return id, nil
+}
+
+// handleCert parses a certificate, checks whether that certificate's key is
+// bad. If the cert's key is bad, handleCert then checks if the cert is revoked.
+// If the cert is not revoked, it returns a badKeyError.
+func handleCert(serial string, der []byte, db dbQueryable, keyPolicy goodkey.KeyPolicy) error {
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return err
+	}
+
+	// If the key is forbidden by the key policy (typically because it's
+	// blocked), print the serial and error message to stderr.
+	if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
+		output := fmt.Sprintf("%s %s", serial, err)
+
+		if isRevoked, err := isRevoked(db, serial); err != nil {
+			return err
+		} else if !isRevoked {
+			return badKeyError{output}
+		}
+	}
+
+	return nil
 }
 
 func isRevoked(db dbQueryable, serial string) (bool, error) {
