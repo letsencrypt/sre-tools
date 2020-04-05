@@ -101,6 +101,7 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 		`SELECT id, serial, der
 		 FROM certificates
 		 where id > ?
+		 ORDER BY id ASC
 		 LIMIT ?`, maxID, *batchSize)
 	if err != nil {
 		return -1, fmt.Errorf("querying certificates > %d: %s", maxID, err)
