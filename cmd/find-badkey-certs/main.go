@@ -83,6 +83,14 @@ func main() {
 	}
 }
 
+type badKeyError struct {
+	msg string
+}
+
+func (bke badKeyError) Error() string {
+	return bke.msg
+}
+
 func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, error) {
 	rows, err := db.Query(
 		`SELECT id, serial, der
@@ -94,32 +102,49 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	}
 	defer rows.Close()
 
+	results := make(chan error)
+
 	var (
 		id     int
 		serial string
 		der    []byte
 	)
 
-	for rows.Next() {
+	var i = 0
+	for ; rows.Next(); i++ {
 		if err := rows.Scan(&id, &serial, &der); err != nil {
 			return -1, err
 		}
 
-		cert, err := x509.ParseCertificate(der)
-		if err != nil {
-			return -1, err
-		}
-
-		// If the key is forbidden by the key policy (typically because it's
-		// blocked), print the serial and error message to stderr.
-		if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
-			output := fmt.Sprintf("%s %s", serial, err)
-
-			if isRevoked, err := isRevoked(db, serial); err != nil {
-				return -1, err
-			} else if !isRevoked {
-				fmt.Fprintln(os.Stderr, output)
+		go func(serial string, der []byte) {
+			cert, err := x509.ParseCertificate(der)
+			if err != nil {
+				results <- err
+				return
 			}
+
+			// If the key is forbidden by the key policy (typically because it's
+			// blocked), print the serial and error message to stderr.
+			if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
+				output := fmt.Sprintf("%s %s", serial, err)
+
+				if isRevoked, err := isRevoked(db, serial); err != nil {
+					results <- err
+					return
+				} else if !isRevoked {
+					results <- badKeyError{output}
+					return
+				}
+			}
+			results <- nil
+		}(serial, der)
+	}
+	for ; i > 0; i-- {
+		err := <-results
+		if _, ok := err.(badKeyError); ok {
+			fmt.Fprintln(os.Stderr, err)
+		} else if err != nil {
+			return -1, err
 		}
 	}
 
