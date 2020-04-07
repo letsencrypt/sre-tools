@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/goodkey"
 )
 
@@ -76,8 +77,6 @@ func main() {
 
 			log.Fatal(err)
 		}
-
-		fmt.Printf("processed batch of certificates, maxID: %d\n", maxID)
 
 		maxID = newMaxID
 	}
@@ -160,6 +159,13 @@ func handleCert(serial string, der []byte, db dbQueryable, keyPolicy goodkey.Key
 	if err != nil {
 		return err
 	}
+
+	hash, err := core.KeyDigest(cert.PublicKey)
+	if err != nil {
+		return nil
+	}
+
+	fmt.Printf("%036x %x\n", cert.SerialNumber, hash)
 
 	// If the key is forbidden by the key policy (typically because it's
 	// blocked), print the serial and error message to stderr.
