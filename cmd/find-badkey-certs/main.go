@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/goodkey"
 )
 
@@ -64,7 +65,7 @@ func main() {
 	}
 	defer db.Close()
 
-	maxID := *startingID
+	maxID := int64(*startingID)
 
 	for {
 		newMaxID, err := queryOnce(db, keyPolicy, maxID)
@@ -76,8 +77,6 @@ func main() {
 
 			log.Fatal(err)
 		}
-
-		fmt.Printf("processed batch of certificates, maxID: %d\n", maxID)
 
 		maxID = newMaxID
 	}
@@ -96,7 +95,7 @@ func (bke badKeyError) Error() string {
 
 // queryOnce processes a batch of certificates starting with maxID, of size
 // *batchSize.
-func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, error) {
+func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int64) (int64, error) {
 	rows, err := db.Query(
 		`SELECT id, serial, der
 		 FROM certificates
@@ -111,7 +110,7 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 	results := make(chan error)
 
 	var (
-		id     int
+		id     int64
 		serial string
 		der    []byte
 	)
@@ -124,9 +123,9 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 			return -1, err
 		}
 
-		go func(serial string, der []byte, results chan<- error) {
-			results <- handleCert(serial, der, db, keyPolicy)
-		}(serial, der, results)
+		go func(id int64, serial string, der []byte, results chan<- error) {
+			results <- handleCert(id, serial, der, db, keyPolicy)
+		}(id, serial, der, results)
 	}
 	// Read off exactly as many entries from the results channel as we put onto
 	// it. Note that we can't just iterate *batchSize many times because the
@@ -155,11 +154,18 @@ func queryOnce(db dbQueryable, keyPolicy goodkey.KeyPolicy, maxID int) (int, err
 // handleCert parses a certificate, checks whether that certificate's key is
 // bad. If the cert's key is bad, handleCert then checks if the cert is revoked.
 // If the cert is not revoked, it returns a badKeyError.
-func handleCert(serial string, der []byte, db dbQueryable, keyPolicy goodkey.KeyPolicy) error {
+func handleCert(id int64, serial string, der []byte, db dbQueryable, keyPolicy goodkey.KeyPolicy) error {
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
 		return err
 	}
+
+	hash, err := core.KeyDigest(cert.PublicKey)
+	if err != nil {
+		return nil
+	}
+
+	fmt.Printf("%d %036x %x\n", id, cert.SerialNumber, hash)
 
 	// If the key is forbidden by the key policy (typically because it's
 	// blocked), print the serial and error message to stderr.
