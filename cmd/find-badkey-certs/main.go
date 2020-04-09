@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"database/sql"
 	"flag"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/goodkey"
 )
 
@@ -160,10 +160,12 @@ func handleCert(id int64, serial string, der []byte, db dbQueryable, keyPolicy g
 		return err
 	}
 
-	hash, err := core.KeyDigest(cert.PublicKey)
+	keyDER, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
 	if err != nil {
-		return nil
+		return err
 	}
+
+	hash := sha256.Sum256(keyDER)
 
 	fmt.Printf("%d %036x %x\n", id, cert.SerialNumber, hash)
 
