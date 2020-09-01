@@ -103,7 +103,7 @@ func writeTSVData(rows sqlRows, outFile io.Writer) error {
 
 // Compress the results TSV file
 func compress(outputFileName string) error {
-	gzipCmd := exec.Command("gzip", outputFileName)
+	gzipCmd := exec.Command("gzip -f", outputFileName)
 	if output, err := execRun(gzipCmd); err != nil {
 		return fmt.Errorf("Could not gzip result file: %s. output: %s", err, string(output))
 	}
@@ -127,15 +127,34 @@ func main() {
 	dbConnect := flag.String("dbConnect", "", "Path to the DB URL file")
 	destination := flag.String("destination", "localhost:/tmp", "Location to SCP the gzipped TSV result file to")
 	key := flag.String("key", "id_rsa", "Identity key for SCP")
+	latestFlag := flag.String("latestdate", "", "Latest date at which to export data for. Will export data for the full day prior to the specified date. Date should be formatted as '2006-01-02' Optional.")
 	flag.Parse()
 
 	// The query we run against the database is to examine the previous day of data
 	// we construct dates that correspond to the start and stop of that 24 hour window
-	now := time.Now()
-	yesterday := now.Add(-24 * time.Hour)
-	yesterdayDateStamp := yesterday.Format("2006-01-02")
-	endDateStamp := now.Format("2006-01-02")
-	outputFileName := fmt.Sprintf("results-%s.tsv", yesterdayDateStamp)
+	// Example: earliestDateStamp=2020-08-20 latestDateStamp=2020-08-21
+
+	var latestDate time.Time
+	var earliestDateStamp string
+	var latestDateStamp string
+	var outputFileName string
+	var err error
+
+	if *latestFlag != "" {
+		// "now" is a misnomer, but it means the arbitrary date you've passed in
+		now, err = time.Parse("2006-01-02", *latestFlag)
+		yesterday := latestDate.Add(-24 * time.Hour)
+
+		cmd.FailOnError(err, "value of -latestdate could not be parsed as date")
+	} else {
+		now := time.Now()
+		yesterday := now.Add(-24 * time.Hour)
+	}
+
+	earliestDateStamp = yesterday.Format("2006-01-02")
+	latestDateStamp = now.Format("2006-01-02")
+
+	outputFileName = fmt.Sprintf("results-%s.tsv", latestDateStamp)
 
 	outFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	cmd.FailOnError(err, fmt.Sprintf("Could not create results file %q", outputFileName))
@@ -145,7 +164,7 @@ func main() {
 		cmd.FailOnError(err, fmt.Sprintf("Could not close output file %q", outputFileName))
 	}()
 
-	rows, err := queryDB(*dbConnect, yesterdayDateStamp, endDateStamp)
+	rows, err := queryDB(*dbConnect, latestDateStamp, earliestDateStamp)
 	cmd.FailOnError(err, "Could not complete database work")
 
 	err = writeTSVData(rows, outFile)
