@@ -139,16 +139,18 @@ func main() {
 	var latestDateStamp string
 	var outputFileName string
 	var err error
+	var now time.Time
+	var yesterday time.Time
 
 	if *latestFlag != "" {
 		// "now" is a misnomer, but it means the arbitrary date you've passed in
 		now, err = time.Parse("2006-01-02", *latestFlag)
-		yesterday := latestDate.Add(-24 * time.Hour)
+		yesterday = latestDate.Add(-24 * time.Hour)
 
 		cmd.FailOnError(err, "value of -latestdate could not be parsed as date")
 	} else {
-		now := time.Now()
-		yesterday := now.Add(-24 * time.Hour)
+		now = time.Now()
+		yesterday = now.Add(-24 * time.Hour)
 	}
 
 	earliestDateStamp = yesterday.Format("2006-01-02")
