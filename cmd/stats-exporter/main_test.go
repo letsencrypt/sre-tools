@@ -277,7 +277,7 @@ func TestCompress(t *testing.T) {
 	outputFileName := "fakeFile.tsv"
 
 	checkedArgs := func(c *exec.Cmd) ([]byte, error) {
-		expected := "gzip fakeFile.tsv"
+		expected := "gzip -f fakeFile.tsv"
 		args := strings.Join(c.Args, " ")
 		if args != expected {
 			return nil, fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
