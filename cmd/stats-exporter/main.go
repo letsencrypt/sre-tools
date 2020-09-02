@@ -103,7 +103,7 @@ func writeTSVData(rows sqlRows, outFile io.Writer) error {
 
 // Compress the results TSV file
 func compress(outputFileName string) error {
-	gzipCmd := exec.Command("gzip -f", outputFileName)
+	gzipCmd := exec.Command("gzip", "-f", outputFileName)
 	if output, err := execRun(gzipCmd); err != nil {
 		return fmt.Errorf("Could not gzip result file: %s. output: %s", err, string(output))
 	}
@@ -134,29 +134,22 @@ func main() {
 	// we construct dates that correspond to the start and stop of that 24 hour window
 	// Example: earliestDateStamp=2020-08-20 latestDateStamp=2020-08-21
 
-	var latestDate time.Time
-	var earliestDateStamp string
-	var latestDateStamp string
-	var outputFileName string
 	var err error
 	var now time.Time
-	var yesterday time.Time
 
 	if *latestFlag != "" {
 		// "now" is a misnomer, but it means the arbitrary date you've passed in
 		now, err = time.Parse("2006-01-02", *latestFlag)
-		yesterday = latestDate.Add(-24 * time.Hour)
-
 		cmd.FailOnError(err, "value of -latestdate could not be parsed as date")
 	} else {
 		now = time.Now()
-		yesterday = now.Add(-24 * time.Hour)
 	}
 
-	earliestDateStamp = yesterday.Format("2006-01-02")
-	latestDateStamp = now.Format("2006-01-02")
+	yesterday := now.Add(-24 * time.Hour)
+	earliestDateStamp := yesterday.Format("2006-01-02")
+	latestDateStamp := now.Format("2006-01-02")
 
-	outputFileName = fmt.Sprintf("results-%s.tsv", latestDateStamp)
+	outputFileName := fmt.Sprintf("results-%s.tsv", latestDateStamp)
 
 	outFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	cmd.FailOnError(err, fmt.Sprintf("Could not create results file %q", outputFileName))
@@ -166,7 +159,7 @@ func main() {
 		cmd.FailOnError(err, fmt.Sprintf("Could not close output file %q", outputFileName))
 	}()
 
-	rows, err := queryDB(*dbConnect, latestDateStamp, earliestDateStamp)
+	rows, err := queryDB(*dbConnect, earliestDateStamp, latestDateStamp)
 	cmd.FailOnError(err, "Could not complete database work")
 
 	err = writeTSVData(rows, outFile)
