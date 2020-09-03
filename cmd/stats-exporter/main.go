@@ -149,7 +149,9 @@ func main() {
 	earliestDateStamp := yesterday.Format("2006-01-02")
 	latestDateStamp := now.Format("2006-01-02")
 
-	outputFileName := fmt.Sprintf("results-%s.tsv", latestDateStamp)
+	// The stats-exporter gathers the previous days stats
+	// so we'll want to name the file based on that day
+	outputFileName := fmt.Sprintf("results-%s.tsv", earliestDateStamp)
 
 	outFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	cmd.FailOnError(err, fmt.Sprintf("Could not create results file %q", outputFileName))
