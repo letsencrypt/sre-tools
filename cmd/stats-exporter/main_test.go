@@ -320,29 +320,6 @@ func TestScp(t *testing.T) {
 	}
 }
 
-func TestS3Put(t *testing.T) {
-	outputFileName := "fakeFile.tsv"
-	s3Bucket := "fake-s3-bucket"
-
-	checkedArgs := func(c *exec.Cmd) ([]byte, error) {
-		expected := "scp -i id_rsa fakeFile.tsv.gz localhost:/tmp"
-		args := strings.Join(c.Args, " ")
-		if args != expected {
-			return nil, fmt.Errorf("wrong argument string. Got %q expected %q", args, expected)
-		}
-		return nil, nil
-	}
-	savedExecRun := execRun
-	execRun = checkedArgs
-	defer func() {
-		execRun = savedExecRun
-	}()
-	err := scp(outputFileName, destination, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestCombinedOutput(t *testing.T) {
 	noisyFailure := func(c *exec.Cmd) ([]byte, error) {
 		return []byte("Exited and have error information"), fmt.Errorf("some error")

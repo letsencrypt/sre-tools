@@ -1,0 +1,54 @@
+137
+
+143k jun 1 ()
+// garbage maybe needed
+
+//type awsConnect interface {
+//	s() ses, error
+//	put() error
+//}
+
+//type createSession func(s3Region string) string
+
+//type createNewSession struct {
+//	session createSession
+//}
+
+
+
+// osFileOpen: Input file path, return file
+//func osFileOpen(fileDir) (*File, error) {
+//	f, err := os.Open(fileDir)
+//	return f, err
+//}
+
+//func fileNewReader(handle io.Reader) error {
+
+//}
+
+//type fileInfo struct {
+//	path  string
+//	size  int64
+//	bytes []byte
+//}
+
+
+
+/*
+func fileToBuffer(fileDir) {
+	//err
+	// Open file for use
+	file, err := os.Open(fileDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Get file size and read the file content into a buffer
+	fileInfo, _ := file.Stat()
+	var size int64 = fileInfo.Size()
+	buffer := make([]byte, size)
+	file.Read(buffer)
+}
+*/
+
