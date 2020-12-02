@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	r3         = "R3"
-	x3         = "Let's Encrypt Authority X3"
-	dateFormat = "2006-01-02"
+	r3 = "R3"
+	x3 = "Let's Encrypt Authority X3"
 )
 
 var debugMode bool
@@ -61,11 +60,11 @@ func rawToChain(rawCerts [][]byte) []*x509.Certificate {
 	return chain
 }
 
-// getChainAsString is used solely if debug is true. Iterates from the
+// chaing2String is used solely if debug is true. Iterates from the
 // leaf (end-entity) certificate all the way up the chain building a
 // string to represent the Subject Common Name and Issuer Common Name
 // for each Certificate
-func getChainAsString(chain []*x509.Certificate) string {
+func chaing2String(chain []*x509.Certificate) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("leafCert: [subjectCN: %s | issuerCN: %s]", chain[0].Subject.CommonName, chain[0].Issuer.CommonName))
 	for num, cert := range chain[1:] {
@@ -86,7 +85,7 @@ func auditChain(rawCerts [][]byte) string {
 	leafIssuerCN := chain[0].Issuer.CommonName
 	if len(chain) > 1 {
 		if debugMode == true {
-			fmt.Println(getChainAsString(chain))
+			fmt.Println(chaing2String(chain))
 		}
 		if leafIssuerCN != r3 && leafIssuerCN != x3 {
 			return ""
@@ -123,8 +122,8 @@ func auditHostname(hostname string) {
 }
 
 // reverseHostname for a given hostname reverses the hostname from the
-// stats-exporter hostname format: <tld> followed by each <label> of the
-// fqdn back to a proper fqdn
+// stats-exporter hostname format: <tld label> followed by each <label>
+// of the fqdn back to a proper fqdn
 func reverseHostname(hostname string) string {
 	labels := strings.Split(hostname, ".")
 	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
@@ -134,9 +133,9 @@ func reverseHostname(hostname string) string {
 }
 
 // statsCsvToHostnames expects a csv file path produced by
-// stats-exporter in the sre-tools package, parses it, and appends the
-// hostname entry from the first column of each row, reverses it (back)
-// into a proper fqdn and appends it to a slice of strings
+// stats-exporter in the sre-tools repo, parses it, reverses the
+// hostname entry from the first column of each row (back) into a proper
+// fqdn and appends it to a slice of strings
 func statsCsvToHostnames(statsCsv string) []string {
 	csvFile, err := os.Open(statsCsv)
 	if err != nil {
