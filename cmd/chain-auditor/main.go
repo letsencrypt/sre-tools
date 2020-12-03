@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/csv"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -33,9 +32,9 @@ func chainContainsR3(chain []*x509.Certificate) bool {
 	return false
 }
 
-// rawToChain marshals a slice of byte slices representing an x.509
+// certBytesToChain marshals a slice of byte slices representing an x.509
 // certificate chain to a slice of *x.509Certificate objects
-func rawToChain(rawCerts [][]byte) []*x509.Certificate {
+func certBytesToChain(rawCerts [][]byte) []*x509.Certificate {
 	chain := []*x509.Certificate{}
 	for _, rawCert := range rawCerts {
 		cert, err := x509.ParseCertificate(rawCert)
@@ -60,45 +59,39 @@ func chainToString(chain []*x509.Certificate) string {
 	return sb.String()
 }
 
-// auditChain for a given slice of byte slices representing an x.509
-// certificate chain, if the Issuer Common Name is const r3, validates
-// that the resulting chain of x509 Certificates contains the
-// corresponding r3 intermediate that issued the leaf Certificate. If a
-// mis-match is present, a string containing the Subject Common Name of
-// the leaf certificate is returned, else, in all other cases an empty
-// string is returned.
-func auditChain(rawCerts [][]byte) string {
-	chain := rawToChain(rawCerts)
+// mistmatchInChain for a given slice of byte slices representing an
+// x.509 certificate chain, if the Issuer Common Name is const r3,
+// validates that the resulting chain of x509 Certificates contains the
+// corresponding r3 intermediate that issued the leaf Certificate.
+func mistmatchInChain(rawCerts [][]byte) bool {
+	chain := certBytesToChain(rawCerts)
 	leafIssuerCN := chain[0].Issuer.CommonName
 	if len(chain) > 1 {
 		if debugMode == true {
 			fmt.Println(chainToString(chain))
 		}
 		if leafIssuerCN == r3 && !chainContainsR3(chain) {
-			return chain[0].Subject.CommonName
+			return true
 		}
 	}
-	return ""
+	return false
 }
 
-// auditHostname for a given hostname, dials and starts a TLS handshake.
+// auditChainForHostname for a given hostname, dials and starts a TLS handshake.
 // The tls.Config skips verification steps and delegates verification to
 // an anonymous function that audits the certification chain
-func auditHostname(hostname string) error {
-	var result error
+func auditChainForHostname(hostname string) bool {
+	var mismatched bool
 	dialer := net.Dialer{Timeout: 1 * time.Second}
 	tlsConfig := tls.Config{
 		InsecureSkipVerify: true,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			misconfiguredCertCN := auditChain(rawCerts)
-			if misconfiguredCertCN != "" {
-				result = errors.New("Error: mis-matched issuer and chain")
-			}
+			mismatched = mistmatchInChain(rawCerts)
 			return nil
 		},
 	}
 	tls.DialWithDialer(&dialer, "tcp", fmt.Sprintf("%s:443", hostname), &tlsConfig)
-	return result
+	return mismatched
 }
 
 // reverseHostname for a given hostname reverses the hostname from the
@@ -150,7 +143,7 @@ func main() {
 	}
 
 	if len(hostnames) == 0 {
-		fmt.Print("You must supply at least one hostname via stdin or tsv file using `--stats-tsv-file`")
+		fmt.Print("You must supply at least one hostname as an argument or a tsv file of using `--stats-tsv-file`")
 		os.Exit(1)
 	}
 
@@ -170,8 +163,8 @@ func main() {
 		wg.Add(1)
 		go func() {
 			for hostname := range hnChan {
-				err := auditHostname(hostname)
-				if err != nil {
+				mismatched := auditChainForHostname(hostname)
+				if mismatched == true {
 					resChan <- hostname
 				}
 			}
@@ -181,9 +174,7 @@ func main() {
 
 	go func() {
 		for result := range resChan {
-			if result != "" {
-				fmt.Println(result)
-			}
+			fmt.Println(result)
 		}
 		doneChan <- true
 	}()

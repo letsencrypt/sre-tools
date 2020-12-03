@@ -6,8 +6,8 @@ and the Subject Name of the of the intermediate certificate.
 
 ## Inputs
 Acceptable inputs are, space separated hostnames supplied as arguments
-via `stdin` or a path to a TSV (tab separated value) file provided
-following the `--stats-tsv-file` flag.
+or a path to a TSV (tab separated value) file provided following the
+`--stats-tsv-file` flag.
 
 ### TSV Format
 The TSV file must contain the hostname in the second column of every row
@@ -26,7 +26,7 @@ leafCert: [subjectCN: <subjectCN> | issuerCN: <issuerCN>] -> chainCert0: [subjec
 
 ## Usage
 
-With debug flag and hostname provided via `stdin`:
+With debug flag and hostname provided as an argument:
 ```shell
 $ go run ./cmd/chain-auditor/main.go --debug letsencrypt.org
 leafCert: [subjectCN: lencr.org | issuerCN: Let's Encrypt Authority X3] -> chainCert0: [subjectCN: Let's Encrypt Authority X3 | issuerCN: DST Root CA X3]
