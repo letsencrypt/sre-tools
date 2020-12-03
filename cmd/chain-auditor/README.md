@@ -15,6 +15,7 @@ and the hostname must be in the following format `<tld label>` followed
 by each `<label>`of the hostname in reverse order (i.e. mail.google.com
 would be com.google.mail)
 
+## Debug Mode
 Provided also is a debug mode. If the operator supplies the flag --debug
 all hostnames audited will have their results printed in the following
 format: 
