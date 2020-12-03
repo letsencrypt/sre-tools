@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -83,14 +84,16 @@ func auditChain(rawCerts [][]byte) string {
 // auditHostname for a given hostname, dials and starts a TLS handshake.
 // The tls.Config skips verification steps and delegates verification to
 // an anonymous function that audits the certification chain
-func auditHostname(hostname string) string {
-	var result string
+func auditHostname(hostname string) error {
+	var result error
 	dialer := net.Dialer{Timeout: 1 * time.Second}
 	tlsConfig := tls.Config{
 		InsecureSkipVerify: true,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			misconfiguredCertCN := auditChain(rawCerts)
-			result = misconfiguredCertCN
+			if misconfiguredCertCN != "" {
+				result = errors.New("Error: mis-matched issuer and chain")
+			}
 			return nil
 		},
 	}
@@ -167,7 +170,10 @@ func main() {
 		wg.Add(1)
 		go func() {
 			for hostname := range hnChan {
-				resChan <- auditHostname(hostname)
+				err := auditHostname(hostname)
+				if err != nil {
+					resChan <- hostname
+				}
 			}
 			wg.Done()
 		}()
