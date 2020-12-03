@@ -46,11 +46,11 @@ func rawToChain(rawCerts [][]byte) []*x509.Certificate {
 	return chain
 }
 
-// chaing2String is used solely if debug is true. Iterates from the
+// chainToString is used solely if debug is true. Iterates from the
 // leaf (end-entity) certificate all the way up the chain building a
 // string to represent the Subject Common Name and Issuer Common Name
 // for each Certificate
-func chaing2String(chain []*x509.Certificate) string {
+func chainToString(chain []*x509.Certificate) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("leafCert: [subjectCN: %s | issuerCN: %s]", chain[0].Subject.CommonName, chain[0].Issuer.CommonName))
 	for num, cert := range chain[1:] {
@@ -71,7 +71,7 @@ func auditChain(rawCerts [][]byte) string {
 	leafIssuerCN := chain[0].Issuer.CommonName
 	if len(chain) > 1 {
 		if debugMode == true {
-			fmt.Println(chaing2String(chain))
+			fmt.Println(chainToString(chain))
 		}
 		if leafIssuerCN == r3 && !chainContainsR3(chain) {
 			return chain[0].Subject.CommonName
@@ -111,7 +111,7 @@ func reverseHostname(hostname string) string {
 
 // statsTsvToHostnames expects a tsv file path produced by
 // stats-exporter in the sre-tools repo, parses it, reverses the
-// hostname entry from the first column of each row (back) into a proper
+// hostname entry from the second column of each row (back) into a proper
 // fqdn and appends it to a slice of strings
 func statsTsvToHostnames(statsTsv string) []string {
 	tsvFile, err := os.Open(statsTsv)
@@ -130,19 +130,18 @@ func statsTsvToHostnames(statsTsv string) []string {
 		if err != nil {
 			log.Fatalln("Issue parsing entry in tsv file", err)
 		}
-		hostnames = append(hostnames, reverseHostname(entry[0]))
+		hostnames = append(hostnames, reverseHostname(entry[1]))
 	}
 	return hostnames
 }
 
 func main() {
 	flag.BoolVar(&debugMode, "debug", false, "Print full audit output for every hostname")
-	var statsTsv string
-	flag.StringVar(&statsTsv, "stats-tsv-file", "", "path to tsv file produced by stats-exporter")
+	statsTsv := flag.String("stats-tsv-file", "", "path to tsv file produced by stats-exporter")
 	flag.Parse()
 	var hostnames []string
-	if statsTsv != "" {
-		hostnames = statsTsvToHostnames(statsTsv)
+	if *statsTsv != "" {
+		hostnames = statsTsvToHostnames(*statsTsv)
 	} else {
 		hostnames = os.Args[1:]
 	}
@@ -185,5 +184,4 @@ func main() {
 	wg.Wait()
 	close(resChan)
 	<-doneChan
-	fmt.Println("Done")
 }
