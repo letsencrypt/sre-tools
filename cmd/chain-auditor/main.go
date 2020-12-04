@@ -59,11 +59,11 @@ func chainToString(chain []*x509.Certificate) string {
 	return sb.String()
 }
 
-// mistmatchInChain for a given slice of byte slices representing an
+// mismatchInChain for a given slice of byte slices representing an
 // x.509 certificate chain, if the Issuer Common Name is const r3,
 // validates that the resulting chain of x509 Certificates contains the
 // corresponding r3 intermediate that issued the leaf Certificate.
-func mistmatchInChain(rawCerts [][]byte) bool {
+func mismatchInChain(rawCerts [][]byte) bool {
 	chain := certBytesToChain(rawCerts)
 	leafIssuerCN := chain[0].Issuer.CommonName
 	if len(chain) > 1 {
@@ -86,7 +86,7 @@ func auditChainForHostname(hostname string) bool {
 	tlsConfig := tls.Config{
 		InsecureSkipVerify: true,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			mismatched = mistmatchInChain(rawCerts)
+			mismatched = mismatchInChain(rawCerts)
 			return nil
 		},
 	}
@@ -159,7 +159,7 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			for hostname := range hnChan {
