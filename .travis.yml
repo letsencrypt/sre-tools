@@ -1,6 +1,9 @@
 language: go
+dist: focal
+os: linux
+
 go:
-  - "stable"
+  - "1.15.5"
 
 # Override the base install phase so that the project can be installed using
 # `-mod=vendor` to use vendored dependencies
