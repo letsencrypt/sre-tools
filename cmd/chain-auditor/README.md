@@ -1,43 +1,39 @@
 # chain-auditor
-For a given list of hostnames, this tool dials and starts a TLS
-handshake and audits the presented (raw) certificate chain for
-inconsistencies between the Issuer Subject Name of the leaf certificate
-and the Subject Name of the of the intermediate certificate.
+For a given list of hostnames, this tool dials and starts a TLS handshake and
+audits the presented (raw) certificate chain for inconsistencies between the
+Issuer Subject Name of the leaf certificate and the Subject Name of the of the
+intermediate certificate.
 
 ## Inputs
-Acceptable inputs are, space separated hostnames supplied as arguments
-or a path to a TSV (tab separated value) file provided following the
-`--stats-tsv-file` flag.
+Acceptable inputs are, space separated hostnames supplied as arguments or a path
+to a TSV (tab separated value) file provided following the `--stats-tsv-file`
+flag.
 
 ### TSV Format
-The TSV file must contain the hostname in the second column of every row
-and the hostname must be in the following format `<tld label>` followed
-by each `<label>`of the hostname in reverse order (i.e. mail.google.com
-would be com.google.mail)
-
-## Debug Mode
-Provided also is a debug mode. If the operator supplies the flag --debug
-all hostnames audited will have their results printed in the following
-format: 
-
-```
-leafCert: [subjectCN: <subjectCN> | issuerCN: <issuerCN>] -> chainCert0: [subjectCN: <subjectCN> | issuerCN: <issuerCN>]
-```
+The TSV file must contain the hostname in the second column of every row and the
+hostname must be in the following format `<tld label>` followed by each
+`<label>`of the hostname in reverse order (i.e. mail.google.com would be
+com.google.mail)
 
 ## Usage
-
-With debug flag and hostname provided as an argument:
+With hostnames provided via `--stats-tsv-file` and `parallelism` (number of
+concurrent hostnames to dial) set to `2`:
 ```shell
-$ go run ./cmd/chain-auditor/main.go --debug letsencrypt.org
-leafCert: [subjectCN: lencr.org | issuerCN: Let's Encrypt Authority X3] -> chainCert0: [subjectCN: Let's Encrypt Authority X3 | issuerCN: DST Root CA X3]
+$ $ go run ./main.go --stats-tsv-file test_hostnames.tsv --parallelism 2
+0.8% (█                    ) audit/s(2.8) mismatches(0) unreachable(2) remain(894) dns(0) netTimeout(2) netOther(0)
 ```
 
-With debug flag and hostnames provided via `--stats-tsv-file`:
-```shell
-$ go run ./cmd/chain-auditor/main.go --debug --stats-tsv-file cmd/chain-auditor/test_hostnames.tsv
-leafCert: [subjectCN: migom.com | issuerCN: Cloudflare Inc ECC CA-3] -> chainCert0: [subjectCN: Cloudflare Inc ECC CA-3 | issuerCN: Baltimore CyberTrust Root]
-leafCert: [subjectCN: sni.cloudflaressl.com | issuerCN: Cloudflare Inc ECC CA-3] -> chainCert0: [subjectCN: Cloudflare Inc ECC CA-3 | issuerCN: Baltimore CyberTrust Root]
-leafCert: [subjectCN: saltstack.com | issuerCN: Amazon] -> chainCert0: [subjectCN: Amazon | issuerCN: Amazon Root CA 1]  -> chainCert1: [subjectCN: Amazon Root CA 1 | issuerCN: Starfield Services Root Certificate Authority - G2]  -> chainCert2: [subjectCN: Starfield Services Root Certificate Authority - G2 | issuerCN: ]
-leafCert: [subjectCN: tjprc.org | issuerCN: cPanel, Inc. Certification Authority] -> chainCert0: [subjectCN: cPanel, Inc. Certification Authority | issuerCN: COMODO RSA Certification Authority]  -> chainCert1: [subjectCN: COMODO RSA Certification Authority | issuerCN: AAA Certificate Services]
-...
-```
+## Current Setup
+This job is currently running on the `chain-auditor` AWS instance. The stats
+files required for this job created by a database job in our infra and
+transmitted via `scp` to the `cthulk` AWS instance.
+
+On the `chain-auditor` instance, the cron that runs `daily-work.sh` is owned and
+run by the `chain-audit` user. This user has the same UID as the `ec2-user` on
+`cthulk` which allows them the same permissions to the files residing in
+`/mnt/efs/`, an AWS EFS filesystem mounted as an NFS share.
+
+Daily, when new gzipped stats files land in the EFS share, `daily-work.sh`
+unpacks the `tsv` file to the `chain-audit` homedir, runs `chain-auditor` to
+produce a results file, deletes the unpacked stats file, and moves the results
+file into the `audit-results` dir.
