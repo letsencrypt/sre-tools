@@ -20,7 +20,7 @@ zcat "${MOUNT_POINT}"/"${STATS_FILENAME}">"${UNPACKED_STATS_FILENAME}"
 # Run the actual audit job against the unpacked stats tsv file
 ./chain-auditor --stats-tsv-file "${UNPACKED_STATS_FILENAME}" --parallelism 150
 
-# Move the finished audit log to a folder with all of it's friends, also makes
+# Move the finished audit log to a folder with all of its friends, also makes
 # it easier to rsync or scp from this host
 mv "${RESULTS_FILENAME}" chain-audit-results/
 
