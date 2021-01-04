@@ -5,7 +5,7 @@ set -eu
 MOUNT_POINT="/mnt/efs"
 
 # Filename of the daily stats tsv file, this is gzipped
-STATS_FILENAME="$(date +"results-%Y-%m-$(expr $(date +%d) - 2).tsv.gz")"
+STATS_FILENAME="results-$(date --rfc-3339=date --date "now -2 days").tsv.gz"
 
 # Filename of the unpacked stats tsv file
 UNPACKED_STATS_FILENAME="${STATS_FILENAME%.*}"

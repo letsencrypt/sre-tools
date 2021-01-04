@@ -74,10 +74,9 @@ func certBytesToChain(rawCerts [][]byte) []*x509.Certificate {
 	return chain
 }
 
-// mismatchInChain for a given slice of byte slices representing an
-// x.509 certificate chain, if the Issuer Common Name is const r3,
-// validates that the resulting chain of x509 Certificates contains the
-// corresponding r3 intermediate that issued the leaf Certificate.
+// mismatchInChain iterates over a slice of byte slices representing an x.509
+// certificate chain, validating that any leaf cert issued by R3 is served with
+// the correct intermediate chain
 func mismatchInChain(rawCerts [][]byte) bool {
 	chain := certBytesToChain(rawCerts)
 	leafIssuerCN := chain[0].Issuer.CommonName
@@ -89,9 +88,7 @@ func mismatchInChain(rawCerts [][]byte) bool {
 	return false
 }
 
-// getConnectProbs for a given error resulting from an attempt to TLS
-// dial a hostname, classify that error as a DNS lookup, Dial Timeout,
-// or Network Other
+// getConnectProbs classifies errors from an attempt to TLS dial a hostname
 func getConnectProbs(err error) probs {
 	probs := probs{}
 	var dnsErr *net.DNSError
@@ -111,9 +108,7 @@ func getConnectProbs(err error) probs {
 	return probs
 }
 
-// auditChainForHostname for a given hostname, dials and starts a TLS handshake.
-// The tls.Config skips verification steps and delegates verification to
-// an anonymous function that audits the certification chain
+// auditChainForHostname dials and starts a TLS handshake for the hostname passed.
 func auditChainForHostname(hostname string) result {
 	result := result{hostname: hostname}
 	dialer := net.Dialer{Timeout: 1 * time.Second}
@@ -148,18 +143,18 @@ func setupProgressBar(total int) *bar.Bar {
 	return progressBar
 }
 
-// shuffleHostnames Our input files contain many adjacent hostnames
-// that resolve to the same IP address, to reduce concurrent calls to
-// the same IP address, we shuffle our hostnames list
+// shuffleHostnames randomizes the order of slice of hostnames passed. Our input
+// files contain many adjacent hostnames that resolve to the same IP address, to
+// reduce concurrent calls to the same IP address
 func shuffleHostnames(hostnames []string) []string {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(hostnames), func(i, j int) { hostnames[i], hostnames[j] = hostnames[j], hostnames[i] })
 	return hostnames
 }
 
-// reverseHostname for a given hostname reverses the hostname from the
-// stats-exporter hostname format: <tld label> followed by each <label>
-// of the fqdn back to a proper fqdn
+// reverseHostname reverses the hostname from the stats-exporter hostname
+// format: <tld label> followed by each <label> of the fqdn back to a proper
+// fqdn
 func reverseHostname(hostname string) string {
 	labels := strings.Split(hostname, ".")
 	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
@@ -168,10 +163,8 @@ func reverseHostname(hostname string) string {
 	return strings.Join(labels, ".")
 }
 
-// statsTsvToHostnames expects a tsv file path produced by
-// stats-exporter in the sre-tools repo, parses it, reverses the
-// hostname entry from the second column of each row (back) into a proper
-// fqdn and appends it to a slice of strings
+// statsTsvToHostnames parses and filters the contents of stats-exporter Tab
+// Separated Value files to a slice of hostnames
 func statsTsvToHostnames(statsTsv string) []string {
 	tsvFile, err := os.Open(statsTsv)
 	if err != nil {
