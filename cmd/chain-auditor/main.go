@@ -4,15 +4,20 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/superhawk610/bar"
 )
 
 const (
@@ -20,6 +25,29 @@ const (
 )
 
 var debugMode bool
+
+type probs struct {
+	netErrTimeout bool
+	netErrOther   bool
+	dnsErr        bool
+}
+
+type result struct {
+	hostname   string
+	reachable  bool
+	tls        string
+	mismatched bool
+	ip         string
+	agent      string
+	probs      probs
+}
+
+var tlsVersions = map[uint16]string{
+	tls.VersionTLS10: "1.0",
+	tls.VersionTLS11: "1.1",
+	tls.VersionTLS12: "1.2",
+	tls.VersionTLS13: "1.3",
+}
 
 // chainContainsR3 checks if a chain of certs contains a certificate
 // where the Subject Common Name matches the const of r3
@@ -46,30 +74,13 @@ func certBytesToChain(rawCerts [][]byte) []*x509.Certificate {
 	return chain
 }
 
-// chainToString is used solely if debug is true. Iterates from the
-// leaf (end-entity) certificate all the way up the chain building a
-// string to represent the Subject Common Name and Issuer Common Name
-// for each Certificate
-func chainToString(chain []*x509.Certificate) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("leafCert: [subjectCN: %s | issuerCN: %s]", chain[0].Subject.CommonName, chain[0].Issuer.CommonName))
-	for num, cert := range chain[1:] {
-		sb.WriteString(fmt.Sprintf(" -> chainCert%d: [subjectCN: %s | issuerCN: %s] ", num, cert.Subject.CommonName, cert.Issuer.CommonName))
-	}
-	return sb.String()
-}
-
-// mismatchInChain for a given slice of byte slices representing an
-// x.509 certificate chain, if the Issuer Common Name is const r3,
-// validates that the resulting chain of x509 Certificates contains the
-// corresponding r3 intermediate that issued the leaf Certificate.
+// mismatchInChain iterates over a slice of byte slices representing an x.509
+// certificate chain, validating that any leaf cert issued by R3 is served with
+// the correct intermediate chain
 func mismatchInChain(rawCerts [][]byte) bool {
 	chain := certBytesToChain(rawCerts)
 	leafIssuerCN := chain[0].Issuer.CommonName
 	if len(chain) > 1 {
-		if debugMode == true {
-			fmt.Println(chainToString(chain))
-		}
 		if leafIssuerCN == r3 && !chainContainsR3(chain) {
 			return true
 		}
@@ -77,26 +88,72 @@ func mismatchInChain(rawCerts [][]byte) bool {
 	return false
 }
 
-// auditChainForHostname for a given hostname, dials and starts a TLS handshake.
-// The tls.Config skips verification steps and delegates verification to
-// an anonymous function that audits the certification chain
-func auditChainForHostname(hostname string) bool {
-	var mismatched bool
+// getConnectProbs classifies errors from an attempt to TLS dial a hostname
+func getConnectProbs(err error) probs {
+	probs := probs{}
+	var dnsErr *net.DNSError
+	var netErr net.Error
+
+	if errors.As(err, &dnsErr) {
+		probs.dnsErr = true
+	}
+
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			probs.netErrTimeout = true
+		} else if !probs.dnsErr {
+			probs.netErrOther = true
+		}
+	}
+	return probs
+}
+
+// auditChainForHostname dials and starts a TLS handshake for the hostname passed.
+func auditChainForHostname(hostname string) result {
+	result := result{hostname: hostname}
 	dialer := net.Dialer{Timeout: 1 * time.Second}
 	tlsConfig := tls.Config{
 		InsecureSkipVerify: true,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			mismatched = mismatchInChain(rawCerts)
+			result.mismatched = mismatchInChain(rawCerts)
 			return nil
 		},
 	}
-	tls.DialWithDialer(&dialer, "tcp", fmt.Sprintf("%s:443", hostname), &tlsConfig)
-	return mismatched
+	conn, err := tls.DialWithDialer(&dialer, "tcp", fmt.Sprintf("%s:443", hostname), &tlsConfig)
+	if err != nil {
+		result.probs = getConnectProbs(err)
+		return result
+	}
+	defer conn.Close()
+	result.tls = tlsVersions[conn.ConnectionState().Version]
+	result.ip, _, _ = net.SplitHostPort(conn.RemoteAddr().String())
+	result.reachable = true
+	return result
 }
 
-// reverseHostname for a given hostname reverses the hostname from the
-// stats-exporter hostname format: <tld label> followed by each <label>
-// of the fqdn back to a proper fqdn
+// setupProgressBar sets the format string used when the progress bar is
+// running and the column width the bar takes up
+func setupProgressBar(total int) *bar.Bar {
+	progressBar := bar.NewWithOpts(
+		bar.WithDimensions(total, 20),
+		bar.WithFormat(
+			":percent :bar audit/s(:rate) mismatches(:mismatched) unreachable(:unreachable) remain(:remain) dns(:dns) netTimeout(:timeout) netOther(:other) "),
+	)
+
+	return progressBar
+}
+
+// shuffleHostnames randomizes the order of slice of hostnames passed. Our input
+// files contain many adjacent hostnames that resolve to the same IP address, to
+// reduce concurrent calls to the same IP address
+func shuffleHostnames(hostnames []string) {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(hostnames), func(i, j int) { hostnames[i], hostnames[j] = hostnames[j], hostnames[i] })
+}
+
+// reverseHostname reverses the hostname from the stats-exporter hostname
+// format: <tld label> followed by each <label> of the fqdn back to a proper
+// fqdn
 func reverseHostname(hostname string) string {
 	labels := strings.Split(hostname, ".")
 	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
@@ -105,16 +162,13 @@ func reverseHostname(hostname string) string {
 	return strings.Join(labels, ".")
 }
 
-// statsTsvToHostnames expects a tsv file path produced by
-// stats-exporter in the sre-tools repo, parses it, reverses the
-// hostname entry from the second column of each row (back) into a proper
-// fqdn and appends it to a slice of strings
+// statsTsvToHostnames parses and filters the contents of stats-exporter Tab
+// Separated Value files to a slice of hostnames
 func statsTsvToHostnames(statsTsv string) []string {
 	tsvFile, err := os.Open(statsTsv)
 	if err != nil {
 		log.Fatalln("Couldn't open the tsv file", err)
 	}
-
 	hostnames := []string{}
 	r := csv.NewReader(tsvFile)
 	r.Comma = '\t'
@@ -126,30 +180,63 @@ func statsTsvToHostnames(statsTsv string) []string {
 		if err != nil {
 			log.Fatalln("Issue parsing entry in tsv file", err)
 		}
+		// *.example.com will not resolve, we shouldn't try, this one
+		// line reduces our hostnames list by ~10%
+		if strings.Contains(entry[1], "*") {
+			continue
+		}
 		hostnames = append(hostnames, reverseHostname(entry[1]))
 	}
 	return hostnames
 }
 
-func main() {
-	flag.BoolVar(&debugMode, "debug", false, "Print full audit output for every hostname")
-	statsTsv := flag.String("stats-tsv-file", "", "path to tsv file produced by stats-exporter")
-	flag.Parse()
+func getHostnames(statsTsv string) []string {
 	var hostnames []string
-	if *statsTsv != "" {
-		hostnames = statsTsvToHostnames(*statsTsv)
-	} else {
-		hostnames = os.Args[1:]
-	}
-
+	hostnames = statsTsvToHostnames(statsTsv)
 	if len(hostnames) == 0 {
-		fmt.Print("You must supply at least one hostname as an argument or a tsv file of using `--stats-tsv-file`")
+		fmt.Print("You must supply a file containing at least one hostname using `--stats-tsv-file`")
 		os.Exit(1)
 	}
+	shuffleHostnames(hostnames)
+	return hostnames
 
-	hnChan := make(chan string, len(hostnames))
-	resChan := make(chan string)
+}
+
+func parseCLIOptions() (string, int) {
+	flag.BoolVar(&debugMode, "debug", false, "Print full audit output for every hostname with a mismatched intermediate")
+	statsTsv := flag.String("stats-tsv-file", "", "path to tab separated value file produced by stats-exporter")
+	parallelism := flag.Int("parallelism", 1, "Specify the number of co-routines to use")
+	flag.Parse()
+	return *statsTsv, *parallelism
+}
+
+func main() {
+	statsTsv, parallelism := parseCLIOptions()
+	hostnames := getHostnames(statsTsv)
+	hostnamesTotal := len(hostnames)
+
+	outFileName := fmt.Sprintf("chain-audit-%s", time.Now().Format("2006-01-02"))
+	if statsTsv != "" {
+		outFileName = fmt.Sprintf("chain-audit-%s", statsTsv)
+	}
+
+	auditFile, err := os.OpenFile(outFileName, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hnChan := make(chan string, hostnamesTotal)
+	resChan := make(chan result)
 	doneChan := make(chan bool, 1)
+
+	var hostnamesRemainCount = hostnamesTotal
+	var dnsCount int
+	var timeoutCount int
+	var otherCount int
+	var unreachableCount int
+	var mismatchedCount int
+
+	progressBar := setupProgressBar(hostnamesTotal)
 
 	go func() {
 		for _, hostname := range hostnames {
@@ -159,14 +246,39 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := 0; i < parallelism; i++ {
 		wg.Add(1)
 		go func() {
 			for hostname := range hnChan {
-				mismatched := auditChainForHostname(hostname)
-				if mismatched == true {
-					resChan <- hostname
+				result := auditChainForHostname(hostname)
+				hostnamesRemainCount--
+				if !result.mismatched {
+					if debugMode {
+						fmt.Printf("%+v\n", result)
+					}
+					resChan <- result
+					mismatchedCount++
 				}
+				if !result.reachable {
+					unreachableCount++
+					if result.probs.dnsErr {
+						dnsCount++
+					}
+					if result.probs.netErrTimeout {
+						timeoutCount++
+					}
+					if result.probs.netErrOther {
+						otherCount++
+					}
+				}
+				progressBar.TickAndUpdate(bar.Context{
+					bar.Ctx("mismatched", strconv.Itoa(mismatchedCount)),
+					bar.Ctx("remain", strconv.Itoa(hostnamesRemainCount)),
+					bar.Ctx("unreachable", strconv.Itoa(unreachableCount)),
+					bar.Ctx("dns", strconv.Itoa(dnsCount)),
+					bar.Ctx("timeout", strconv.Itoa(timeoutCount)),
+					bar.Ctx("other", strconv.Itoa(otherCount)),
+				})
 			}
 			wg.Done()
 		}()
@@ -174,11 +286,35 @@ func main() {
 
 	go func() {
 		for result := range resChan {
-			fmt.Println(result)
+			_, err := fmt.Fprintf(auditFile, "%s\t%s\n", result.hostname, result.ip)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 		doneChan <- true
 	}()
 	wg.Wait()
+	progressBar.Done()
 	close(resChan)
 	<-doneChan
+
+	if err := auditFile.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	auditMetricsFile, err := os.OpenFile("chain-audit-metrics.tsv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = fmt.Fprintf(auditMetricsFile, "%s\ttotal:%d\tmismatched:%d\tunreachable:%d\terrdns:%d\terrtimeout:%d\terrnetother:%d\n",
+		outFileName, hostnamesTotal, mismatchedCount, unreachableCount, dnsCount, timeoutCount, otherCount)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := auditMetricsFile.Close(); err != nil {
+		log.Fatal(err)
+	}
+
 }
