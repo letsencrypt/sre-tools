@@ -146,10 +146,9 @@ func setupProgressBar(total int) *bar.Bar {
 // shuffleHostnames randomizes the order of slice of hostnames passed. Our input
 // files contain many adjacent hostnames that resolve to the same IP address, to
 // reduce concurrent calls to the same IP address
-func shuffleHostnames(hostnames []string) []string {
+func shuffleHostnames(hostnames []string) {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(hostnames), func(i, j int) { hostnames[i], hostnames[j] = hostnames[j], hostnames[i] })
-	return hostnames
 }
 
 // reverseHostname reverses the hostname from the stats-exporter hostname
@@ -198,7 +197,8 @@ func getHostnames(statsTsv string) []string {
 		fmt.Print("You must supply a file containing at least one hostname using `--stats-tsv-file`")
 		os.Exit(1)
 	}
-	return shuffleHostnames(hostnames)
+	shuffleHostnames(hostnames)
+	return hostnames
 
 }
 
