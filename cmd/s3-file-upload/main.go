@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config and it's fields are exported to recieve the contents of a YAML
+// Config and it's fields are exported to receive the contents of a YAML
 // configuration file
 type Conf struct {
 	SecretAccessKey string `yaml:"secret_access_key"`
@@ -64,7 +64,7 @@ func unmarshalConf(configFilename string) (*Conf, error) {
 }
 
 func makeS3Client(c *Conf) (*s3.Client, error) {
-	awsConfig, err := config.LoadDefaultConfig(context.TODO())
+	awsConfig, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func makeS3Client(c *Conf) (*s3.Client, error) {
 
 func listBucketContents(c *Conf, client *s3.Client) error {
 	input := &s3.ListObjectsV2Input{Bucket: aws.String(c.BucketName)}
-	output, err := client.ListObjectsV2(context.TODO(), input)
+	output, err := client.ListObjectsV2(context.Background(), input)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func putFile(c *Conf, client *s3.Client, filename string) error {
 		Key:    aws.String(filename),
 		Body:   file,
 	}
-	_, err = client.PutObject(context.TODO(), input)
+	_, err = client.PutObject(context.Background(), input)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func deleteFile(c *Conf, client *s3.Client, filename string) error {
 		Bucket: aws.String(c.BucketName),
 		Key:    aws.String(filename),
 	}
-	_, err := client.DeleteObject(context.TODO(), input)
+	_, err := client.DeleteObject(context.Background(), input)
 	if err != nil {
 		return err
 	}
