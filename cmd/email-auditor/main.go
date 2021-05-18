@@ -42,13 +42,14 @@ func (r *queryResult) getAddresses() ([]string, error) {
 func (m *emailAuditor) collectEmails() error {
 	_, err := m.dbMap.Select(
 		m.queryResults,
-		`SELECT SQL_BIG_RESULT
-			cert.registrationID AS id,
-			name.reversedName AS hostname
-		FROM certificates AS cert
-			INNER JOIN issuedNames AS name ON name.serial = cert.serial
-		WHERE cert.expires >= :expireCutoff
-		GROUP BY cert.registrationID;`,
+		`SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+		SELECT DISTINCT
+			r.id AS id,
+		    r.contact AS contact
+	    FROM registrations AS r
+		    INNER JOIN certificates AS c on c.registrationID = r.id
+	    WHERE r.contact != '[]'
+		    AND c.expires >= :expireCutoff`,
 		map[string]interface{}{
 			"expireCutoff": m.clk.Now().Add(-m.grace),
 		})
