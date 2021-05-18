@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	mrand "math/rand"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -87,13 +88,15 @@ func Fingerprint256(data []byte) string {
 	return base64.RawURLEncoding.EncodeToString(d.Sum(nil))
 }
 
-// KeyDigest produces a padded, standard Base64-encoded SHA256 digest of a
+type Sha256Digest [sha256.Size]byte
+
+// KeyDigest produces a Base64-encoded SHA256 digest of a
 // provided public key.
-func KeyDigest(key crypto.PublicKey) (string, error) {
+func KeyDigest(key crypto.PublicKey) (Sha256Digest, error) {
 	switch t := key.(type) {
 	case *jose.JSONWebKey:
 		if t == nil {
-			return "", fmt.Errorf("Cannot compute digest of nil key")
+			return Sha256Digest{}, fmt.Errorf("Cannot compute digest of nil key")
 		}
 		return KeyDigest(t.Key)
 	case jose.JSONWebKey:
@@ -103,17 +106,26 @@ func KeyDigest(key crypto.PublicKey) (string, error) {
 		if err != nil {
 			logger := blog.Get()
 			logger.Debugf("Problem marshaling public key: %s", err)
-			return "", err
+			return Sha256Digest{}, err
 		}
-		spkiDigest := sha256.Sum256(keyDER)
-		return base64.StdEncoding.EncodeToString(spkiDigest[0:32]), nil
+		return sha256.Sum256(keyDER), nil
 	}
+}
+
+// KeyDigestB64 produces a padded, standard Base64-encoded SHA256 digest of a
+// provided public key.
+func KeyDigestB64(key crypto.PublicKey) (string, error) {
+	digest, err := KeyDigest(key)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(digest[:]), nil
 }
 
 // KeyDigestEquals determines whether two public keys have the same digest.
 func KeyDigestEquals(j, k crypto.PublicKey) bool {
-	digestJ, errJ := KeyDigest(j)
-	digestK, errK := KeyDigest(k)
+	digestJ, errJ := KeyDigestB64(j)
+	digestK, errK := KeyDigestB64(k)
 	// Keys that don't have a valid digest (due to marshalling problems)
 	// are never equal. So, e.g. nil keys are not equal.
 	if errJ != nil || errK != nil {
@@ -197,6 +209,27 @@ func GetBuildHost() (retID string) {
 	return
 }
 
+// IsAnyNilOrZero returns whether any of the supplied values are nil, or (if not)
+// if any of them is its type's zero-value. This is useful for validating that
+// all required fields on a proto message are present.
+func IsAnyNilOrZero(vals ...interface{}) bool {
+	for _, val := range vals {
+		switch v := val.(type) {
+		case nil:
+			return true
+		case []byte:
+			if len(v) == 0 {
+				return true
+			}
+		default:
+			if reflect.ValueOf(v).IsZero() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // UniqueLowerNames returns the set of all unique names in the input after all
 // of them are lowercased. The returned names will be in their lowercased form
 // and sorted alphabetically.
@@ -214,49 +247,21 @@ func UniqueLowerNames(names []string) (unique []string) {
 	return
 }
 
-// LoadCertBundle loads a PEM bundle of certificates from disk
-func LoadCertBundle(filename string) ([]*x509.Certificate, error) {
-	bundleBytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	var bundle []*x509.Certificate
-	var block *pem.Block
-	rest := bundleBytes
-	for {
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			break
-		}
-		if block.Type != "CERTIFICATE" {
-			return nil, fmt.Errorf("Block has invalid type: %s", block.Type)
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			return nil, err
-		}
-		bundle = append(bundle, cert)
-	}
-
-	if len(bundle) == 0 {
-		return nil, fmt.Errorf("Bundle doesn't contain any certificates")
-	}
-
-	return bundle, nil
-}
-
 // LoadCert loads a PEM certificate specified by filename or returns an error
-func LoadCert(filename string) (cert *x509.Certificate, err error) {
+func LoadCert(filename string) (*x509.Certificate, error) {
 	certPEM, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return
+		return nil, err
 	}
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
 		return nil, fmt.Errorf("No data in cert PEM file %s", filename)
 	}
-	cert, err = x509.ParseCertificate(block.Bytes)
-	return
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return cert, nil
 }
 
 // retryJitter is used to prevent bunched retried queries from falling into lockstep

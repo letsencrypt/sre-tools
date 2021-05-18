@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/x509"
 	"database/sql"
@@ -49,7 +50,7 @@ func main() {
 		os.Exit(failStatus)
 	}
 
-	keyPolicy, err := goodkey.NewKeyPolicy("", *blockedKeysFile)
+	keyPolicy, err := goodkey.NewKeyPolicy("", *blockedKeysFile, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -171,7 +172,7 @@ func handleCert(id int64, serial string, der []byte, db dbQueryable, keyPolicy g
 
 	// If the key is forbidden by the key policy (typically because it's
 	// blocked), print the serial and error message to stderr.
-	if err := keyPolicy.GoodKey(cert.PublicKey); err != nil {
+	if err := keyPolicy.GoodKey(context.Background(), cert.PublicKey); err != nil {
 		output := fmt.Sprintf("%s %s", serial, err)
 
 		if isRevoked, err := isRevoked(db, serial); err != nil {

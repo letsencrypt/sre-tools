@@ -21,12 +21,6 @@ import (
 // AcmeStatus defines the state of a given authorization
 type AcmeStatus string
 
-// AcmeResource values identify different types of ACME resources
-type AcmeResource string
-
-// OCSPStatus defines the state of OCSP for a domain
-type OCSPStatus string
-
 // These statuses are the states of authorizations, challenges, and registrations
 const (
 	StatusUnknown     = AcmeStatus("unknown")     // Unknown status; the default
@@ -38,6 +32,9 @@ const (
 	StatusRevoked     = AcmeStatus("revoked")     // Object no longer valid
 	StatusDeactivated = AcmeStatus("deactivated") // Object has been deactivated
 )
+
+// AcmeResource values identify different types of ACME resources
+type AcmeResource string
 
 // The types of ACME resources
 const (
@@ -51,30 +48,35 @@ const (
 	ResourceKeyChange    = AcmeResource("key-change")
 )
 
-// These status are the states of OCSP
-const (
-	OCSPStatusGood    = OCSPStatus("good")
-	OCSPStatusRevoked = OCSPStatus("revoked")
-)
+// AcmeChallenge values identify different types of ACME challenges
+type AcmeChallenge string
 
 // These types are the available challenges
+// TODO(#5009): Make this a custom type as well.
 const (
-	ChallengeTypeHTTP01    = "http-01"
-	ChallengeTypeDNS01     = "dns-01"
-	ChallengeTypeTLSALPN01 = "tls-alpn-01"
+	ChallengeTypeHTTP01    = AcmeChallenge("http-01")
+	ChallengeTypeDNS01     = AcmeChallenge("dns-01")
+	ChallengeTypeTLSALPN01 = AcmeChallenge("tls-alpn-01")
 )
 
-// ValidChallenge tests whether the provided string names a known challenge
-func ValidChallenge(name string) bool {
-	switch name {
-	case ChallengeTypeHTTP01,
-		ChallengeTypeDNS01,
-		ChallengeTypeTLSALPN01:
+// IsValid tests whether the challenge is a known challenge
+func (c AcmeChallenge) IsValid() bool {
+	switch c {
+	case ChallengeTypeHTTP01, ChallengeTypeDNS01, ChallengeTypeTLSALPN01:
 		return true
 	default:
 		return false
 	}
 }
+
+// OCSPStatus defines the state of OCSP for a domain
+type OCSPStatus string
+
+// These status are the states of OCSP
+const (
+	OCSPStatusGood    = OCSPStatus("good")
+	OCSPStatusRevoked = OCSPStatus("revoked")
+)
 
 // DNSPrefix is attached to DNS names in DNS challenges
 const DNSPrefix = "_acme-challenge"
@@ -189,7 +191,7 @@ func looksLikeKeyAuthorization(str string) error {
 // together with the common metadata elements.
 type Challenge struct {
 	// The type of challenge
-	Type string `json:"type"`
+	Type AcmeChallenge `json:"type"`
 
 	// The status of this challenge
 	Status AcmeStatus `json:"status,omitempty"`
@@ -217,6 +219,9 @@ type Challenge struct {
 	// Contains information about URLs used or redirected to and IPs resolved and
 	// used
 	ValidationRecord []ValidationRecord `json:"validationRecord,omitempty"`
+	// The time at which the server validated the challenge. Required by
+	// RFC8555 if status is valid.
+	Validated *time.Time `json:"validated,omitempty"`
 }
 
 // ExpectedKeyAuthorization computes the expected KeyAuthorization value for
@@ -383,18 +388,18 @@ func (authz *Authorization) FindChallengeByStringID(id string) int {
 }
 
 // SolvedBy will look through the Authorizations challenges, returning the type
-// of the *first* challenge it finds with Status: valid, or "" if no challenge
-// is valid.
-func (authz *Authorization) SolvedBy() string {
+// of the *first* challenge it finds with Status: valid, or an error if no
+// challenge is valid.
+func (authz *Authorization) SolvedBy() (*AcmeChallenge, error) {
 	if len(authz.Challenges) == 0 {
-		return ""
+		return nil, fmt.Errorf("Authorization has no challenges")
 	}
 	for _, chal := range authz.Challenges {
 		if chal.Status == StatusValid {
-			return chal.Type
+			return &chal.Type, nil
 		}
 	}
-	return ""
+	return nil, fmt.Errorf("Authorization not solved by any challenge")
 }
 
 // JSONBuffer fields get encoded and decoded JOSE-style, in base64url encoding
@@ -428,12 +433,6 @@ func (jb *JSONBuffer) UnmarshalJSON(data []byte) (err error) {
 	}
 	*jb, err = base64URLDecode(str)
 	return
-}
-
-// Precertificate objects are entirely internal to the server.  The only
-// thing exposed on the wire is the precertificate itself.
-type Precertificate struct {
-	DER []byte `db:"der"`
 }
 
 // Certificate objects are entirely internal to the server.  The only
@@ -491,68 +490,8 @@ type CertificateStatus struct {
 	NotAfter  time.Time `db:"notAfter"`
 	IsExpired bool      `db:"isExpired"`
 
+	// TODO(#5152): Replace IssuerID with IssuerNameID.
 	IssuerID *int64
-}
-
-// OCSPResponse is a (large) table of OCSP responses. This contains all
-// historical OCSP responses we've signed, is append-only, and is likely to get
-// quite large.
-// It must be administratively truncated outside of Boulder.
-type OCSPResponse struct {
-	ID int `db:"id"`
-
-	// serial: Same as certificate serial.
-	Serial string `db:"serial"`
-
-	// createdAt: The date the response was signed.
-	CreatedAt time.Time `db:"createdAt"`
-
-	// response: The encoded and signed CRL.
-	Response []byte `db:"response"`
-}
-
-// CRL is a large table of signed CRLs. This contains all historical CRLs
-// we've signed, is append-only, and is likely to get quite large.
-// It must be administratively truncated outside of Boulder.
-type CRL struct {
-	// serial: Same as certificate serial.
-	Serial string `db:"serial"`
-
-	// createdAt: The date the CRL was signed.
-	CreatedAt time.Time `db:"createdAt"`
-
-	// crl: The encoded and signed CRL.
-	CRL string `db:"crl"`
-}
-
-// OCSPSigningRequest is a transfer object representing an OCSP Signing Request
-type OCSPSigningRequest struct {
-	CertDER   []byte
-	Status    string
-	Reason    revocation.Reason
-	RevokedAt time.Time
-}
-
-// SignedCertificateTimestamp is the internal representation of ct.SignedCertificateTimestamp
-// that is used to maintain backwards compatibility with our old CT implementation.
-type SignedCertificateTimestamp struct {
-	ID int `db:"id"`
-	// The version of the protocol to which the SCT conforms
-	SCTVersion uint8 `db:"sctVersion"`
-	// the SHA-256 hash of the log's public key, calculated over
-	// the DER encoding of the key represented as SubjectPublicKeyInfo.
-	LogID string `db:"logID"`
-	// Timestamp (in ms since unix epoc) at which the SCT was issued
-	Timestamp uint64 `db:"timestamp"`
-	// For future extensions to the protocol
-	Extensions []byte `db:"extensions"`
-	// The Log's signature for this SCT
-	Signature []byte `db:"signature"`
-
-	// The serial of the certificate this SCT is for
-	CertificateSerial string `db:"certificateSerial"`
-
-	LockCol int64
 }
 
 // FQDNSet contains the SHA256 hash of the lowercased, comma joined dNSNames
@@ -565,19 +504,7 @@ type FQDNSet struct {
 	Expires time.Time
 }
 
-// Order represents the request object that forms the basis of the v2 style
-// issuance flow
-type Order struct {
-	ID                int64
-	RegistrationID    int64
-	Expires           time.Time
-	Error             error
-	CertificateSerial string
-	Authorizations    []Authorization
-	Status            AcmeStatus
-}
-
-// SCTDER is a convenience type
+// SCTDERs is a convenience type
 type SCTDERs [][]byte
 
 // CertDER is a convenience type that helps differentiate what the

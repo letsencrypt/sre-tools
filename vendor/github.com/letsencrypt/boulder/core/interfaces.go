@@ -9,10 +9,8 @@ import (
 
 	jose "gopkg.in/square/go-jose.v2"
 
-	caPB "github.com/letsencrypt/boulder/ca/proto"
 	corepb "github.com/letsencrypt/boulder/core/proto"
 	"github.com/letsencrypt/boulder/identifier"
-	pubpb "github.com/letsencrypt/boulder/publisher/proto"
 	rapb "github.com/letsencrypt/boulder/ra/proto"
 	"github.com/letsencrypt/boulder/revocation"
 	sapb "github.com/letsencrypt/boulder/sa/proto"
@@ -58,13 +56,13 @@ type WebFrontEnd interface {
 // RegistrationAuthority defines the public interface for the Boulder RA
 type RegistrationAuthority interface {
 	// [WebFrontEnd]
-	NewRegistration(ctx context.Context, reg Registration) (Registration, error)
+	NewRegistration(ctx context.Context, reg *corepb.Registration) (*corepb.Registration, error)
 
 	// [WebFrontEnd]
 	NewAuthorization(ctx context.Context, authz Authorization, regID int64) (Authorization, error)
 
 	// [WebFrontEnd]
-	NewCertificate(ctx context.Context, csr CertificateRequest, regID int64) (Certificate, error)
+	NewCertificate(ctx context.Context, csr CertificateRequest, regID int64, issuerNameID int64) (Certificate, error)
 
 	// [WebFrontEnd]
 	UpdateRegistration(ctx context.Context, base, updates Registration) (Registration, error)
@@ -91,24 +89,12 @@ type RegistrationAuthority interface {
 	AdministrativelyRevokeCertificate(ctx context.Context, cert x509.Certificate, code revocation.Reason, adminName string) error
 }
 
-// CertificateAuthority defines the public interface for the Boulder CA
-type CertificateAuthority interface {
-	// [RegistrationAuthority]
-	IssuePrecertificate(ctx context.Context, issueReq *caPB.IssueCertificateRequest) (*caPB.IssuePrecertificateResponse, error)
-
-	// [RegistrationAuthority]
-	IssueCertificateForPrecertificate(ctx context.Context, req *caPB.IssueCertificateForPrecertificateRequest) (Certificate, error)
-
-	GenerateOCSP(ctx context.Context, ocspReq *caPB.GenerateOCSPRequest) (*caPB.OCSPResponse, error)
-}
-
 // PolicyAuthority defines the public interface for the Boulder PA
 type PolicyAuthority interface {
 	WillingToIssue(domain identifier.ACMEIdentifier) error
 	WillingToIssueWildcards(identifiers []identifier.ACMEIdentifier) error
 	ChallengesFor(domain identifier.ACMEIdentifier) ([]Challenge, error)
-	ChallengeTypeEnabled(t string) bool
-	ValidDomain(domain string) error
+	ChallengeTypeEnabled(t AcmeChallenge) bool
 }
 
 // StorageGetter are the Boulder SA's read-only methods
@@ -135,7 +121,7 @@ type StorageGetter interface {
 	GetValidOrderAuthorizations2(ctx context.Context, req *sapb.GetValidOrderAuthorizationsRequest) (*sapb.Authorizations, error)
 	CountInvalidAuthorizations2(ctx context.Context, req *sapb.CountInvalidAuthorizationsRequest) (*sapb.Count, error)
 	GetValidAuthorizations2(ctx context.Context, req *sapb.GetValidAuthorizationsRequest) (*sapb.Authorizations, error)
-	SerialExists(ctx context.Context, req *sapb.Serial) (*sapb.Exists, error)
+	KeyBlocked(ctx context.Context, req *sapb.KeyBlockedRequest) (*sapb.Exists, error)
 }
 
 // StorageAdder are the Boulder SA's write/update methods
@@ -155,17 +141,13 @@ type StorageAdder interface {
 	NewAuthorizations2(ctx context.Context, req *sapb.AddPendingAuthorizationsRequest) (*sapb.Authorization2IDs, error)
 	FinalizeAuthorization2(ctx context.Context, req *sapb.FinalizeAuthorizationRequest) error
 	DeactivateAuthorization2(ctx context.Context, req *sapb.AuthorizationID2) (*corepb.Empty, error)
+	AddBlockedKey(ctx context.Context, req *sapb.AddBlockedKeyRequest) (*corepb.Empty, error)
 }
 
 // StorageAuthority interface represents a simple key/value
-// store.  It is divided into StorageGetter and StorageUpdater
-// interfaces for privilege separation.
+// store. The add and get interfaces contained within are divided
+// for privilege separation.
 type StorageAuthority interface {
 	StorageGetter
 	StorageAdder
-}
-
-// Publisher defines the public interface for the Boulder Publisher
-type Publisher interface {
-	SubmitToSingleCTWithResult(ctx context.Context, req *pubpb.Request) (*pubpb.Result, error)
 }

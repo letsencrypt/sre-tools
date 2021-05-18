@@ -6,7 +6,10 @@ import (
 	"github.com/letsencrypt/boulder/identifier"
 )
 
-// ErrorType provides a coarse category for BoulderErrors
+// ErrorType provides a coarse category for BoulderErrors.
+// Objects of type ErrorType should never be directly returned by other
+// functions; instead use the methods below to create an appropriate
+// BoulderError wrapping one of these types.
 type ErrorType int
 
 const (
@@ -19,7 +22,7 @@ const (
 	RejectedIdentifier
 	InvalidEmail
 	ConnectionFailure
-	WrongAuthorizationState
+	_ // Reserved, previously WrongAuthorizationState
 	CAA
 	MissingSCTs
 	Duplicate
@@ -28,6 +31,10 @@ const (
 	BadPublicKey
 	BadCSR
 )
+
+func (ErrorType) Error() string {
+	return "urn:ietf:params:acme:error"
+}
 
 // BoulderError represents internal Boulder errors
 type BoulderError struct {
@@ -47,6 +54,10 @@ func (be *BoulderError) Error() string {
 	return be.Detail
 }
 
+func (be *BoulderError) Unwrap() error {
+	return be.Type
+}
+
 // WithSubErrors returns a new BoulderError instance created by adding the
 // provided subErrs to the existing BoulderError.
 func (be *BoulderError) WithSubErrors(subErrs []SubBoulderError) *BoulderError {
@@ -63,15 +74,6 @@ func New(errType ErrorType, msg string, args ...interface{}) error {
 		Type:   errType,
 		Detail: fmt.Sprintf(msg, args...),
 	}
-}
-
-// Is is a convenience function for testing the internal type of an BoulderError
-func Is(err error, errType ErrorType) bool {
-	bErr, ok := err.(*BoulderError)
-	if !ok {
-		return false
-	}
-	return bErr.Type == errType
 }
 
 func InternalServerError(msg string, args ...interface{}) error {
@@ -107,10 +109,6 @@ func InvalidEmailError(msg string, args ...interface{}) error {
 
 func ConnectionFailureError(msg string, args ...interface{}) error {
 	return New(ConnectionFailure, msg, args...)
-}
-
-func WrongAuthorizationStateError(msg string, args ...interface{}) error {
-	return New(WrongAuthorizationState, msg, args...)
 }
 
 func CAAError(msg string, args ...interface{}) error {
