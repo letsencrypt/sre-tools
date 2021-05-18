@@ -22,19 +22,29 @@ type contactAuditor struct {
 	grace time.Duration
 }
 
+// queryResult is receiver for gorp select queries.
 type queryResult struct {
-	ID        int64
-	Contact   []byte
+	// Receiver for the `id` column.
+	ID int64
+
+	// Receiver for the `contact` column.
+	Contact []byte
+
+	// Receiver for e-mail addresses unmarshalled from the `Contact`
+	// field.
 	addresses []string
 }
 
+// queryResults is a selectable 'holder' for gorp queries.
 type queryResults []*queryResult
 
-func (m contactAuditor) collectEmails() (queryResults, error) {
+// collectContacts queries the database for all IDs and Contacts with
+// certificates whose expiration falls within the grace period.
+func (m contactAuditor) collectContacts() (queryResults, error) {
 	var holder queryResults
 	_, err := m.dbMap.Exec("SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;")
 	if err != nil {
-		return nil, fmt.Errorf("error while setting tranaction level: %s", err)
+		return nil, fmt.Errorf("error while setting transaction level: %s", err)
 	}
 	_, err = m.dbMap.Select(
 		&holder,
@@ -52,6 +62,8 @@ func (m contactAuditor) collectEmails() (queryResults, error) {
 	return holder, nil
 }
 
+// unmarshalAddresses unmarshalls the `Contact` field of the inner
+// `queryResult` and extracts the email addresses.
 func (r *queryResult) unmarshalAddresses() error {
 	var contactFields []string
 	err := json.Unmarshal(r.Contact, &contactFields)
@@ -60,15 +72,16 @@ func (r *queryResult) unmarshalAddresses() error {
 	}
 	for _, entry := range contactFields {
 		if strings.HasPrefix(entry, "mailto:") {
-			email := strings.TrimPrefix(entry, "mailto:")
-			r.addresses = append(r.addresses, email)
+			r.addresses = append(r.addresses, strings.TrimPrefix(entry, "mailto:"))
 		}
 	}
 	return nil
 }
 
+// run extracts email addresses from the database and attempts to
+// validate each.
 func (e contactAuditor) run() (queryResults, error) {
-	results, err := e.collectEmails()
+	results, err := e.collectContacts()
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +93,8 @@ func (e contactAuditor) run() (queryResults, error) {
 		for _, address := range result.addresses {
 			err := policy.ValidEmail(address)
 			if err != nil {
-				fmt.Printf("address: %q for ID: %d failed validation due to: %s\n", address, result.ID, err)
+				fmt.Printf(
+					"validation failed for address: %q for ID: %d for reason: %q\n", address, result.ID, err)
 				continue
 			}
 		}
