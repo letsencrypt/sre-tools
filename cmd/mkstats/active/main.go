@@ -37,7 +37,7 @@ func ReverseName(domain string) string {
 }
 
 // PrintMemUsage outputs the current, total and OS memory being used. As well as the number
-// of garage collection cycles completed.
+// of garbage collection cycles completed.
 func PrintMemUsage() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
