@@ -13,16 +13,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"gopkg.in/yaml.v2"
 )
 
 // Config and it's fields are exported to receive the contents of a YAML
-// configuration file
+// configuration file.
 type Conf struct {
 	SecretAccessKey string `yaml:"secret_access_key"`
 	AccessKeyID     string `yaml:"access_key_id"`
 	Region          string `yaml:"region"`
 	BucketName      string `yaml:"bucket_name"`
+	PutObjectACL    string `yaml:"put_object_acl"`
 }
 
 func validateConf(conf Conf, configFilename string) (*Conf, error) {
@@ -102,6 +104,7 @@ func putFile(c *Conf, client *s3.Client, filename string) error {
 	input := &s3.PutObjectInput{
 		Bucket: aws.String(c.BucketName),
 		Key:    aws.String(filename),
+		ACL:    types.ObjectCannedACL(c.PutObjectACL),
 		Body:   file,
 	}
 	_, err = client.PutObject(context.Background(), input)
