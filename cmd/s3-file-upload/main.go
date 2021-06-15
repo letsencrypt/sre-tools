@@ -43,6 +43,22 @@ func validateConf(conf Conf, configFilename string) (*Conf, error) {
 	if conf.BucketName == "" {
 		return nil, fmt.Errorf("required key: `bucket_name` is missing from file: %q", configFilename)
 	}
+
+	if conf.PutObjectACL != "" {
+		err := func() error {
+			var acl types.ObjectCannedACL
+			for _, value := range acl.Values() {
+				if string(value) == conf.PutObjectACL {
+					return nil
+				}
+			}
+			return fmt.Errorf("optional key: `put_object_acl` got: %q, from file: %q, expected one in: %s",
+				conf.PutObjectACL, configFilename, acl.Values())
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &conf, nil
 }
 
