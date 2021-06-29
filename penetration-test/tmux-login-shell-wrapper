@@ -1,10 +1,15 @@
 #!/bin/bash
 
+PENTEST_SHARED_GROUP="pentest"
+
 # Don't tmux inside tmux
 if [ -n ${TMUX} ]; then
     DATE=$(date +%Y%m%d%H%M%s%N)
     SESSION_NAME="${DATE}-${USER}"
 
     # https://github.com/asciinema/asciinema/issues/255
-    exec asciinema rec --quiet --raw --command "tmux -L ${SESSION_NAME} new-session -A -s ${SESSION_NAME}" >( socat STDIN UNIX-LISTEN:/tmp/asciinema-recordings/${SESSION_NAME}.cast,user=${USER},group=pentest,mode=775 )
+    exec asciinema rec \
+      --quiet --raw \
+      --command "tmux -L ${SESSION_NAME} new-session -A -s ${SESSION_NAME}" \
+      >( socat STDIN UNIX-LISTEN:/tmp/asciinema-recordings/${SESSION_NAME}.cast,user=${USER},group=${PENTEST_SHARED_GROUP},mode=775 )
 fi

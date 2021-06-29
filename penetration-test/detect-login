@@ -1,11 +1,11 @@
 #!/bin/bash
-#set -x
+
 SRE_SHARED_GROUP="sre"
 SRE_MEMBER_NAMES=(
     $( members ${SRE_SHARED_GROUP} )
 )
-for sre_name in "${SRE_MEMBER_NAMES[@]}"; do
-    SRE_MEMBER_IDS+=($( id -u "${sre_name}" ))
+for SRE_NAME in "${SRE_MEMBER_NAMES[@]}"; do
+    SRE_MEMBER_IDS+=($( id -u "${SRE_NAME}" ))
 done
 
 EXCLUDE_REGEX="(.lock|root|tmux-(0$(printf "|%s" "${SRE_MEMBER_IDS[@]}")))"
@@ -14,12 +14,16 @@ EXCLUDE_REGEX="(.lock|root|tmux-(0$(printf "|%s" "${SRE_MEMBER_IDS[@]}")))"
 # recording to their servers.
 export ASCIINEMA_API_URL='http://127.0.0.1'
 
-inotifywait -qmr --format '%w%f' --exclude "${EXCLUDE_REGEX}"\
-  -e create /tmp | while read EVENT_PATH; do
+inotifywait --quiet --monitor --recursive      \
+  --format '%w%f' --exclude "${EXCLUDE_REGEX}" \
+  -e create /tmp                               \
+  | while read EVENT_PATH; do
     echo "[$(date --rfc-3339=seconds)] new event path: ${EVENT_PATH}"
 
-    if ! echo "${EVENT_PATH}" | grep -qF 'tmux-'; then echo "not a tmux thing"; continue; fi
-    [ ! -S "${EVENT_PATH}" ] && { echo "not a socket"; continue; }
+    if ! echo "${EVENT_PATH}" | grep -qF 'tmux-'; then continue; fi
+
+    if [ ! -S "${EVENT_PATH}" ]; then continue; fi
+
     PENTEST_TMUX_SOCKET="${EVENT_PATH}"
     PENTEST_TMUX_SESSION="${PENTEST_TMUX_SOCKET##*/}"
     PENTEST_TMUX_USER="$(echo ${PENTEST_TMUX_SESSION} | awk --field-separator '-' '{print $2}')"
@@ -29,8 +33,12 @@ inotifywait -qmr --format '%w%f' --exclude "${EXCLUDE_REGEX}"\
     # Allow SREs to view the socat output coming from the pentester's shell.
     # When the pentester closes their terminal session, this backgrounded
     # tmux session's window will close and clean up after itself.
-    echo "opening session window: ${PENTEST_TMUX_SESSION}, with target ${SRE_TMUX_SESSION}, using socket: /tmp/${SRE_TMUX_SESSION}"
-    #tmux -S /tmp/${SRE_TMUX_SESSION} new-window -n ${PENTEST_TMUX_SESSION} -t ${SRE_TMUX_SESSION} "sudo socat UNIX-CONNECT:\"/tmp/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" EXEC:\"tee -a /tmp/asciinema-recordings/${PENTEST_TMUX_SESSION}.json\" | asciinema play -" &
-    tmux -S /tmp/${SRE_TMUX_SESSION} new-window -n ${PENTEST_TMUX_SESSION} -t ${SRE_TMUX_SESSION} "sudo socat UNIX-CONNECT:\"/tmp/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" STDOUT" &
-    echo next
+    echo -n "opening session window: ${PENTEST_TMUX_SESSION},"
+    echo -n " with target ${SRE_TMUX_SESSION},"
+    echo    " using socket: /tmp/${SRE_TMUX_SESSION}"
+    tmux -S /tmp/${SRE_TMUX_SESSION} new-window \
+      -n ${PENTEST_TMUX_SESSION}                \
+      -t ${SRE_TMUX_SESSION}                    \
+      "sudo socat UNIX-CONNECT:\"/tmp/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" STDOUT" \
+      &
 done
