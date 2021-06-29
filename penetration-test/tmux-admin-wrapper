@@ -19,8 +19,8 @@ if [ -n ${TMUX} ]; then
 
     # Attach to the window group of the shared session
     tmux -S /tmp/${SESSION_NAME} new-session \
-      -A                            \
-      -s "${SESSION_NAME}-$(id -u)" \
+      -A                                     \
+      -s "${SESSION_NAME}-$(id -u)"          \
       -t "${SESSION_NAME}"
 else
     echo "Already inside tmux, exiting."
