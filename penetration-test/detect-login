@@ -14,7 +14,7 @@ EXCLUDE_REGEX="(.lock|root|tmux-(0$(printf "|%s" "${SRE_MEMBER_IDS[@]}")))"
 # recording to their servers.
 export ASCIINEMA_API_URL='http://127.0.0.1'
 
-inotifywait --quiet --monitor --recursive      \
+sudo inotifywait --quiet --monitor --recursive \
   --format '%w%f' --exclude "${EXCLUDE_REGEX}" \
   -e create /tmp                               \
   | while read EVENT_PATH; do
