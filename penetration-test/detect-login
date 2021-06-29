@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ $UID -ne 0 ]; then
+    echo "You need to run this as root. May I suggest \`sudo\`?"
+    exit 1
+fi
+
 SRE_SHARED_GROUP="sre"
 SRE_MEMBER_NAMES=(
     $( members ${SRE_SHARED_GROUP} )
@@ -14,7 +19,7 @@ EXCLUDE_REGEX="(.lock|root|tmux-(0$(printf "|%s" "${SRE_MEMBER_IDS[@]}")))"
 # recording to their servers.
 export ASCIINEMA_API_URL='http://127.0.0.1'
 
-sudo inotifywait --quiet --monitor --recursive \
+inotifywait --quiet --monitor --recursive \
   --format '%w%f' --exclude "${EXCLUDE_REGEX}" \
   -e create /tmp                               \
   | while read EVENT_PATH; do
@@ -39,6 +44,6 @@ sudo inotifywait --quiet --monitor --recursive \
     tmux -S /tmp/${SRE_TMUX_SESSION} new-window \
       -n ${PENTEST_TMUX_SESSION}                \
       -t ${SRE_TMUX_SESSION}                    \
-      "sudo socat UNIX-CONNECT:\"/tmp/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" STDOUT" \
+      "socat UNIX-CONNECT:\"/var/log/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" STDOUT" \
       &
 done

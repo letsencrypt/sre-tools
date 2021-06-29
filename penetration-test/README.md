@@ -57,9 +57,9 @@ sudo install                                \
   penetration-test/tmux-admin-wrapper       \
   /usr/local/sbin/
 
-sudo mkdir -p /tmp/asciinema-recordings
-sudo chown root:pentest /tmp/asciinema-recordings
-sudo chmod 0775 /tmp/asciinema-recordings
+sudo mkdir -p /var/log/asciinema-recordings
+sudo chown root:sre /var/log/asciinema-recordings
+sudo chmod 1777 /var/log/asciinema-recordings
 ```
 
 ## How to use this
@@ -73,7 +73,7 @@ ps aux | grep detect-login | grep -v grep
 
 If there isn't a hit, spawn that script in a screen or something so it stays running:
 ```
-screen -d -m detect-login
+screen -d -m sudo detect-login
 # Leave that screen session detached; you won't need it any more.
 ```
 
@@ -82,7 +82,7 @@ Next, create/attach to a shared SRE tmux session that allows each SRE to indepen
 tmux-admin-wrapper
 ```
 
-Screen output logs from the pentesters' sessions can be found at `/tmp/asciinema-recordings/*.txt`.
+Screen output logs from the pentesters' sessions can be found at `/var/log/asciinema-recordings/*.txt`.
 
 #### Troubleshooting
 

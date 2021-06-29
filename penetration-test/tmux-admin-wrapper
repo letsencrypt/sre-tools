@@ -14,7 +14,7 @@ if [ -n ${TMUX} ]; then
         sudo chown root:sre /tmp/${SESSION_NAME}
 
         # Set our variables
-        tmux -S /tmp/${SESSION_NAME} source-file /etc/tmux.conf
+        tmux -S /tmp/${SESSION_NAME} source-file /etc/skel/.tmux.conf
     fi
 
     # Attach to the window group of the shared session
