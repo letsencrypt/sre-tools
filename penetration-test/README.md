@@ -84,6 +84,14 @@ tmux-admin-wrapper
 
 Screen output logs from the pentesters' sessions can be found at `/var/log/asciinema-recordings/*.txt`.
 
+#### Kicking out a pentester
+
+Get the tty of the logged in user and then pkill it.
+```
+w
+sudo pkill -9 -t pts/#
+```
+
 #### Troubleshooting
 
 If you can't connect to the admin session, remove `/tmp/sre-shared-session` and the lock (if it exists).
