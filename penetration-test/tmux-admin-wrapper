@@ -13,8 +13,10 @@ if [ -n ${TMUX} ]; then
         tmux -S /tmp/${SESSION_NAME} new-session -d -s ${SESSION_NAME}
         sudo chown root:sre /tmp/${SESSION_NAME}
 
-        # Set our variables
-        tmux -S /tmp/${SESSION_NAME} source-file /etc/skel/.tmux.conf
+        tmux -S /tmp/${SESSION_NAME} new-window \
+          -n watcher                            \
+          -t ${SESSION_NAME}                    \
+          "watch --interval 1 w" &
     fi
 
     # Attach to the window group of the shared session
