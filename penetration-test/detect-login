@@ -21,11 +21,9 @@ export ASCIINEMA_API_URL='http://127.0.0.1'
 
 inotifywait --quiet --monitor --recursive      \
   --format '%w%f' --exclude "${EXCLUDE_REGEX}" \
-  -e create /tmp                               \
+  -e create /var/log/asciinema-recordings      \
   | while read EVENT_PATH; do
     echo "[$(date --rfc-3339=seconds)] new event path: ${EVENT_PATH}"
-
-    if ! echo "${EVENT_PATH}" | grep -qF 'tmux-'; then continue; fi
 
     if [ ! -S "${EVENT_PATH}" ]; then continue; fi
 
@@ -44,6 +42,6 @@ inotifywait --quiet --monitor --recursive      \
     tmux -S /tmp/${SRE_TMUX_SESSION} new-window \
       -n ${PENTEST_TMUX_SESSION}                \
       -t ${SRE_TMUX_SESSION}                    \
-      "socat UNIX-CONNECT:\"/var/log/asciinema-recordings/${PENTEST_TMUX_SESSION}.cast\" STDOUT" \
+      "sudo socat UNIX-CONNECT:\"/var/log/asciinema-recordings/${PENTEST_TMUX_SESSION}\" STDOUT" \
       &
 done
