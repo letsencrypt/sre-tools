@@ -11,14 +11,19 @@ if [ -n ${TMUX} ]; then
     # The socket isn't automatically cleaned up by tmux upon exit.
     if [ ! -S /tmp/${SESSION_NAME} ]; then
         tmux -S /tmp/${SESSION_NAME} new-session -d -s ${SESSION_NAME}
-        chown root:sre /tmp/${SESSION_NAME}
+        sudo chown root:sre /tmp/${SESSION_NAME}
 
-        # Set our variables
-        tmux -S /tmp/${SESSION_NAME} source-file /etc/tmux.conf
+        tmux -S /tmp/${SESSION_NAME} new-window \
+          -n watcher                            \
+          -t ${SESSION_NAME}                    \
+          "watch --interval 1 w" &
     fi
 
     # Attach to the window group of the shared session
-    tmux -S /tmp/${SESSION_NAME} new-session -A -t ${SESSION_NAME}
+    tmux -S /tmp/${SESSION_NAME} new-session \
+      -A                                     \
+      -s "${SESSION_NAME}-$(id -u)"          \
+      -t "${SESSION_NAME}"
 else
     echo "Already inside tmux, exiting."
     exit 0

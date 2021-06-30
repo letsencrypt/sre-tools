@@ -21,7 +21,8 @@ On the pentest jump host:
 ```
 # Change this to the list of penetration testers, if their accounts already
 # exist. Otherwise, make it an empty string.
-GEESE="duck goose greyduck"
+#GEESE="duck goose greyduck"
+GEESE=""
 
 sudo apt update
 sudo apt --assume-yes install \
@@ -56,9 +57,9 @@ sudo install                                \
   penetration-test/tmux-admin-wrapper       \
   /usr/local/sbin/
 
-sudo mkdir -p /tmp/asciinema-recordings
-sudo chown root:pentest /tmp/asciinema-recordings
-sudo chmod 0775 /tmp/asciinema-recordings
+sudo mkdir -p /var/log/asciinema-recordings
+sudo chown root:sre /var/log/asciinema-recordings
+sudo chmod 1777 /var/log/asciinema-recordings
 ```
 
 ## How to use this
@@ -72,7 +73,7 @@ ps aux | grep detect-login | grep -v grep
 
 If there isn't a hit, spawn that script in a screen or something so it stays running:
 ```
-screen -d -m detect-login
+screen -d -m sudo detect-login
 # Leave that screen session detached; you won't need it any more.
 ```
 
@@ -81,7 +82,19 @@ Next, create/attach to a shared SRE tmux session that allows each SRE to indepen
 tmux-admin-wrapper
 ```
 
-Screen output logs from the pentesters' sessions can be found at `/tmp/asciinema-recordings/*.txt`.
+Screen output logs from the pentesters' sessions can be found at `/var/log/asciinema-recordings/*.txt`.
+
+#### Kicking out a pentester
+
+Get the tty of the logged in user and then pkill it.
+```
+w
+sudo pkill -9 -t pts/#
+```
+
+#### Troubleshooting
+
+If you can't connect to the admin session, remove `/tmp/sre-shared-session` and the lock (if it exists).
 
 ### Pentester
 All a pentester has to do is log into the server. Their default shell will be set to `tmux-login-shell-wrapper`, which spawns a `tmux` session with a socket at a known location. Upon that socket's creation, SRE tooling will automatically begin recording and monitoring the pentester's `tmux` session.
